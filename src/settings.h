@@ -7,8 +7,7 @@ struct Settings {
     // Selección
     std::wstring videoDevice;   // symlink
     std::wstring videoName;     // para reconocerla aunque cambie de puerto
-    int lastMode = 0;           // 0 = parado, 1 = solo audio, 2 = vídeo + audio
-    bool resume = false;        // al abrir, reanudar lo último que se usó
+    bool autoAudio = false;     // al abrir, iniciar «Solo audio» directamente
     UINT32 width = 0, height = 0;  // 0 = automático
     double fps = 0;                // 0 = el máximo disponible
     std::wstring format;           // "" = automático, si no "NV12", "YUY2", "MJPEG"...

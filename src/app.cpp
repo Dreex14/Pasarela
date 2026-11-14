@@ -36,7 +36,7 @@ namespace {
 
 enum : int {
     ID_BTN_AUDIO = 101, ID_BTN_VIDEO, ID_BTN_STOP, ID_SLIDER_VOL, ID_BTN_MUTE, ID_CB_VIDEO, ID_BTN_REFRESH,
-    ID_CB_AOUT, ID_BTN_ADV, ID_CB_QUALITY, ID_CB_FPS, ID_CB_FORMAT, ID_CB_AIN, ID_TG_RESUME, ID_TG_TRAY,
+    ID_CB_AOUT, ID_BTN_ADV, ID_CB_QUALITY, ID_CB_FPS, ID_CB_FORMAT, ID_CB_AIN, ID_TG_AUTO_AUDIO, ID_TG_TRAY,
     ID_TG_TOPMOST, ID_TG_VSYNC, ID_TG_FULLRANGE, ID_TG_DIAG, ID_TG_EXCLUSIVE, ID_CB_BUFFER, ID_SLIDER_DELAY,
     ID_BTN_FOLDER, ID_TG_HIDE_VIDEO,
 };
@@ -181,7 +181,7 @@ private:
     Settings s_;
 
     HWND btnAudio_{}, btnVideo_{}, btnStop_{}, slVolume_{}, btnMute_{}, cbVideo_{}, btnRefresh_{}, cbOut_{}, btnAdv_{};
-    HWND cbQuality_{}, cbFps_{}, cbFormat_{}, cbIn_{}, tgResume_{}, tgTray_{}, tgTopmost_{}, tgVsync_{}, tgFullRange_{};
+    HWND cbQuality_{}, cbFps_{}, cbFormat_{}, cbIn_{}, tgAutoAudio_{}, tgTray_{}, tgTopmost_{}, tgVsync_{}, tgFullRange_{};
     HWND tgDiag_{}, tgExclusive_{}, cbBuffer_{}, slDelay_{}, btnFolder_{}, tgHideVideo_{};
 
     RECT rcTitle_{}, rcSubtitle_{}, rcVolumeValue_{}, rcStatus_{}, rcTip_{}, rcExclusiveWarn_{}, rcLblDelay_{},
@@ -297,11 +297,8 @@ int App::Run(HINSTANCE inst, int show) {
     ShowWindow(hwnd_, show);
     UpdateWindow(hwnd_);
 
-    // Reanudar lo último (opcional). El vídeo espera a conocer los modos.
-    if (s_.resume) {
-        if (s_.lastMode == kAudio) GoAudio();
-        else if (s_.lastMode == kVideo) GoVideo();
-    }
+    // Opcional: empezar a oír la consola nada más abrir.
+    if (s_.autoAudio) GoAudio();
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -377,7 +374,7 @@ void App::CreateControls() {
     tgTopmost_ = MakeButton(w, ID_TG_TOPMOST, L"Vídeo siempre encima");
     tgHideVideo_ = MakeButton(w, ID_TG_HIDE_VIDEO, L"Ocultar Pasarela al mostrar el vídeo");
     tgTray_ = MakeButton(w, ID_TG_TRAY, L"Al minimizar, ir a la bandeja");
-    tgResume_ = MakeButton(w, ID_TG_RESUME, L"Al abrir, reanudar lo último");
+    tgAutoAudio_ = MakeButton(w, ID_TG_AUTO_AUDIO, L"Al abrir, iniciar Solo audio");
     cbIn_ = MakeCombo(w, ID_CB_AIN);
     cbBuffer_ = MakeCombo(w, ID_CB_BUFFER);
     slDelay_ = ui::CreateSlider(w, ID_SLIDER_DELAY, 0, 300, s_.audioDelayMs);
@@ -393,7 +390,7 @@ void App::CreateControls() {
     SetToggle(tgTopmost_, s_.topmost);
     SetToggle(tgHideVideo_, s_.hideOnVideo);
     SetToggle(tgTray_, s_.tray);
-    SetToggle(tgResume_, s_.resume);
+    SetToggle(tgAutoAudio_, s_.autoAudio);
     SetToggle(tgExclusive_, s_.exclusive);
     SetToggle(tgDiag_, s_.diagnostics);
 
@@ -534,7 +531,7 @@ void App::LayoutSettings() {
     y += P(20);
     add({x, y, x + colW, y + P(18)}, L"VENTANA", 11.5f, ui::theme::textDim, true);
     y += P(28);
-    for (HWND t : {tgHideVideo_, tgTray_, tgResume_}) {
+    for (HWND t : {tgHideVideo_, tgTray_, tgAutoAudio_}) {
         place(t, x, y, colW, P(30));
         y += P(36);
     }
@@ -1115,7 +1112,6 @@ void App::RefreshAudioDevices() {
 
 void App::SetSession(Session s) {
     session_ = s;
-    if (s != kOff) s_.lastMode = s;
     EnableWindow(btnStop_, s != kOff);
     UpdateExecutionState();
     UpdateRunningStatus();
@@ -1827,7 +1823,7 @@ void App::OnCommand(int id, int code) {
         case ID_BTN_FOLDER:
             ShellExecuteW(hwnd_, L"open", DataDirectory().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             return;
-        case ID_TG_RESUME: s_.resume = !s_.resume; SetToggle(tgResume_, s_.resume); return;
+        case ID_TG_AUTO_AUDIO: s_.autoAudio = !s_.autoAudio; SetToggle(tgAutoAudio_, s_.autoAudio); return;
         case ID_TG_TRAY: s_.tray = !s_.tray; SetToggle(tgTray_, s_.tray); return;
         case ID_TG_VSYNC: s_.vsync = !s_.vsync; SetToggle(tgVsync_, s_.vsync); ApplyRenderOptions(); return;
         case ID_TG_FULLRANGE:
@@ -2047,10 +2043,8 @@ LRESULT App::MainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             GetWindowPlacement(h, &wp2);
             s_.mainX = wp2.rcNormalPosition.left;
             s_.mainY = wp2.rcNormalPosition.top;
-            Session last = session_;
             StopVideo();
             StopAudio();
-            if (last != kOff) s_.lastMode = last;
             s_.Save();
             DestroyWindow(h);
             return 0;

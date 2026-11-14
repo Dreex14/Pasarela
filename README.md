@@ -57,7 +57,7 @@ Notas:
 | Audio exclusivo | Toma la salida en exclusiva. Discord no podrá capturar el sonido y otras apps no sonarán en esa salida. |
 | Ocultar Pasarela al mostrar el vídeo | Activado por defecto: con vídeo solo se ve su ventana. |
 | Al minimizar, ir a la bandeja | Minimizar = segundo plano. |
-| Al abrir, reanudar lo último | Arranca directamente en el último modo usado. |
+| Al abrir, iniciar Solo audio | Al abrir Pasarela empieza a sonar la consola sin pulsar nada. |
 | Diagnóstico | FPS recibidos y mostrados, fotogramas descartados, tiempos medidos, colchón de audio y cortes. |
 
 La configuración se guarda en `Pasarela.ini` junto al `.exe` (o en `%APPDATA%\Pasarela` si esa carpeta no admite escritura). El registro `Pasarela.log` se reinicia en cada ejecución y nunca se envía a ningún sitio.

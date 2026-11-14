@@ -28,8 +28,8 @@ void Settings::Load() {
     const wchar_t* w = L"Ventanas";
     videoDevice = ReadStr(d, L"Video", L"");
     videoName = ReadStr(d, L"VideoNombre", L"");
-    lastMode = Clamp(ReadInt(d, L"UltimoModo", 0), 0, 2);
-    resume = ReadInt(d, L"Reanudar", 0) != 0;
+    // "Reanudar" es el nombre antiguo de esta opción: se respeta si ya estaba activada.
+    autoAudio = ReadInt(d, L"IniciarSoloAudio", ReadInt(d, L"Reanudar", 0)) != 0;
     width = (UINT32)ReadInt(d, L"Ancho", 0);
     height = (UINT32)ReadInt(d, L"Alto", 0);
     fps = _wtof(ReadStr(d, L"FPS", L"0").c_str());
@@ -73,8 +73,7 @@ void Settings::Save() const {
     const wchar_t* w = L"Ventanas";
     WriteStr(d, L"Video", videoDevice);
     WriteStr(d, L"VideoNombre", videoName);
-    WriteInt(d, L"UltimoModo", lastMode);
-    WriteInt(d, L"Reanudar", resume);
+    WriteInt(d, L"IniciarSoloAudio", autoAudio);
     WriteInt(d, L"Ancho", (int)width);
     WriteInt(d, L"Alto", (int)height);
     WriteStr(d, L"FPS", Fmt(L"%.3f", fps));
