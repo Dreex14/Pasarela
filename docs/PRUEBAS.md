@@ -42,8 +42,8 @@ Para el audio: graba con el móvil cerca del altavoz de la TV/monitor y de los a
 3. Si la ve en negro: en Discord, Ajustes › Voz y vídeo, activa la captura con la tecnología más reciente.
 4. Con un juego del PC abierto, repite el paso 1: la ventana debe seguir siendo capturable.
 
-### 4. Sesión larga
-Deja **Solo audio** 1 hora con *Ajustes › Mostrar diagnóstico* activo y anota al final: *Colchón* (debe seguir cerca del objetivo), *Vacíos* y *Recortes*.
+### 4. Sesión larga ✔ (según tu uso)
+Has usado Pasarela durante mucho rato, en audio y en vídeo, sin ningún problema ni corte audible. El diagnóstico llegó a marcar «Vacíos» muy altos sin que se oyera nada: casi seguro son ratos en que la consola (p. ej. el menú HOME) no emite sonido y la capturadora no manda datos; el medidor no distingue ese caso de un corte real.
 
 ### 5. Recuperación
 - Desenchufa el USB de la capturadora con el vídeo abierto: debe salir «Capturadora desconectada»; al volver a enchufar, se reconecta sola.

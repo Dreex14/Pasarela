@@ -242,7 +242,7 @@ void AudioMonitor::RecomputeTarget() {
     double rate = sampleRate_;
     if (rate <= 0) return;
     double capMs = std::max<double>(capPeriodFrames_, capPacketMax_.load()) * 1000.0 / rate;
-    double renChunkMs = (settings_.exclusive ? renBufferFrames_ : renPeriodFrames_) * 1000.0 / rate;
+    double renChunkMs = renPeriodFrames_ * 1000.0 / rate;
     double margin = settings_.profile == AudioBufferProfile::Ultra ? 1.0
                     : settings_.profile == AudioBufferProfile::Low ? 4.0
                                                                    : 12.0;
@@ -324,62 +324,22 @@ void AudioMonitor::AudioThread(std::promise<HRESULT>* ready, std::wstring* error
     auto* mixOut = reinterpret_cast<WAVEFORMATEX*>(outMix.data());
     bool renLowLatency = false, systemResampler = false;
 
-    if (!settings_.exclusive) {
-        if (mixOut->nSamplesPerSec == sampleRate_ && KindOf(mixOut) != kUnknown) {
-            renFormat_ = outMix;
-            hr = InitShared(outDev.Get(), mixOut, 0, renClient_, renLowLatency, renPeriodFrames_);
-        } else {
-            // Frecuencias distintas: Windows convierte (añade algo de latencia).
-            renFormat_ = MakeFormat(kFloat32, sampleRate_, mixOut->nChannels, ChannelMaskOf(mixOut));
-            systemResampler = true;
-            hr = InitShared(outDev.Get(), reinterpret_cast<WAVEFORMATEX*>(renFormat_.data()),
-                            AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
-                            renClient_, renLowLatency, renPeriodFrames_);
-        }
-        if (FAILED(hr)) return fail(1, L"Initialize(salida compartida)", hr);
+    if (mixOut->nSamplesPerSec == sampleRate_ && KindOf(mixOut) != kUnknown) {
+        renFormat_ = outMix;
+        hr = InitShared(outDev.Get(), mixOut, 0, renClient_, renLowLatency, renPeriodFrames_);
     } else {
-        // Modo exclusivo: hay que encontrar un formato que acepte el hardware tal cual.
-        ComPtr<IAudioClient> client;
-        hr = outDev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &client);
-        if (FAILED(hr)) return fail(1, L"Activate(salida exclusiva)", hr);
-        const int kinds[] = {kFloat32, kInt32, kInt24, kInt16};
-        UINT32 chans[] = {mixOut->nChannels, 2};
-        bool found = false;
-        for (UINT32 ch : chans) {
-            for (int k : kinds) {
-                auto f = MakeFormat(k, sampleRate_, ch, ch == mixOut->nChannels ? ChannelMaskOf(mixOut) : 0);
-                if (client->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, reinterpret_cast<WAVEFORMATEX*>(f.data()), nullptr) == S_OK) {
-                    renFormat_ = f;
-                    found = true;
-                    break;
-                }
-            }
-            if (found) break;
-        }
-        if (!found) return fail(1, L"Formato exclusivo", AUDCLNT_E_UNSUPPORTED_FORMAT);
-        auto* fmt = reinterpret_cast<WAVEFORMATEX*>(renFormat_.data());
-        REFERENCE_TIME defP = 0, minP = 0;
-        client->GetDevicePeriod(&defP, &minP);
-        REFERENCE_TIME period = minP ? minP : defP;
-        hr = client->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, period, period, fmt, nullptr);
-        if (hr == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) {
-            UINT32 frames = 0;
-            client->GetBufferSize(&frames);
-            period = REFERENCE_TIME(double(kHnsPerSec) * frames / fmt->nSamplesPerSec + 0.5);
-            client.Reset();
-            hr = outDev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &client);
-            if (SUCCEEDED(hr))
-                hr = client->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, period, period, fmt, nullptr);
-        }
-        if (FAILED(hr)) return fail(1, L"Initialize(salida exclusiva)", hr);
-        renClient_ = client;
-        renLowLatency = true;
+        // Frecuencias distintas: Windows convierte (añade algo de latencia).
+        renFormat_ = MakeFormat(kFloat32, sampleRate_, mixOut->nChannels, ChannelMaskOf(mixOut));
+        systemResampler = true;
+        hr = InitShared(outDev.Get(), reinterpret_cast<WAVEFORMATEX*>(renFormat_.data()),
+                        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, renClient_,
+                        renLowLatency, renPeriodFrames_);
     }
+    if (FAILED(hr)) return fail(1, L"Initialize(salida)", hr);
     auto* renFmt = reinterpret_cast<WAVEFORMATEX*>(renFormat_.data());
     renKind_ = KindOf(renFmt);
     outCh_ = renFmt->nChannels;
     renClient_->GetBufferSize(&renBufferFrames_);
-    if (settings_.exclusive) renPeriodFrames_ = renBufferFrames_;
     hr = renClient_->GetService(IID_PPV_ARGS(&render_));
     if (FAILED(hr)) return fail(1, L"GetService(render)", hr);
 
@@ -393,12 +353,6 @@ void AudioMonitor::AudioThread(std::promise<HRESULT>* ready, std::wstring* error
     renEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     capClient_->SetEventHandle(capEvent_);
     renClient_->SetEventHandle(renEvent_);
-
-    if (settings_.exclusive) {  // el buffer exclusivo debe empezar lleno (de silencio)
-        BYTE* p = nullptr;
-        if (SUCCEEDED(render_->GetBuffer(renBufferFrames_, &p)))
-            render_->ReleaseBuffer(renBufferFrames_, AUDCLNT_BUFFERFLAGS_SILENT);
-    }
 
     REFERENCE_TIME capLat = 0, renLat = 0;
     capClient_->GetStreamLatency(&capLat);
@@ -415,7 +369,6 @@ void AudioMonitor::AudioThread(std::promise<HRESULT>* ready, std::wstring* error
     {
         std::lock_guard<std::mutex> lock(statsMutex_);
         stats_.running = true;
-        stats_.exclusive = settings_.exclusive;
         stats_.lowLatencyCapture = capLowLatency;
         stats_.lowLatencyRender = renLowLatency;
         stats_.systemResampler = systemResampler;
@@ -428,9 +381,9 @@ void AudioMonitor::AudioThread(std::promise<HRESULT>* ready, std::wstring* error
         stats_.captureStreamLatencyMs = capLat / 10000.0;
         stats_.renderStreamLatencyMs = renLat / 10000.0;
     }
-    Log(L"Audio: %u Hz, %u->%u canales, entrada %s período %.2f ms, salida %s %s período %.2f ms búfer %.2f ms%s",
+    Log(L"Audio: %u Hz, %u->%u canales, entrada %s período %.2f ms, salida %s período %.2f ms búfer %.2f ms%s",
         sampleRate_, inCh_, outCh_, capLowLatency ? L"IAudioClient3" : L"estándar",
-        capPeriodFrames_ * 1000.0 / sampleRate_, settings_.exclusive ? L"exclusiva" : L"compartida",
+        capPeriodFrames_ * 1000.0 / sampleRate_,
         renLowLatency ? L"baja latencia" : L"estándar", renPeriodFrames_ * 1000.0 / sampleRate_,
         renBufferFrames_ * 1000.0 / sampleRate_, systemResampler ? L" (conversión de frecuencia de Windows)" : L"");
 
@@ -600,18 +553,13 @@ void AudioMonitor::RenderLoop() {
         if (w != WAIT_OBJECT_0) continue;
         UINT32 frames = 0, padding = 0;
         HRESULT hr = S_OK;
-        if (settings_.exclusive) {
-            frames = renBufferFrames_;
-            padding = renBufferFrames_;
-        } else {
-            hr = renClient_->GetCurrentPadding(&padding);
-            if (SUCCEEDED(hr)) {
-                double mult = settings_.profile == AudioBufferProfile::Ultra ? 1.5
-                              : settings_.profile == AudioBufferProfile::Low ? 2.0
-                                                                             : 3.0;
-                UINT32 targetPad = std::min<UINT32>(renBufferFrames_, UINT32(renPeriodFrames_ * mult + 0.5));
-                frames = targetPad > padding ? targetPad - padding : 0;
-            }
+        hr = renClient_->GetCurrentPadding(&padding);
+        if (SUCCEEDED(hr)) {
+            double mult = settings_.profile == AudioBufferProfile::Ultra ? 1.5
+                          : settings_.profile == AudioBufferProfile::Low ? 2.0
+                                                                         : 3.0;
+            UINT32 targetPad = std::min<UINT32>(renBufferFrames_, UINT32(renPeriodFrames_ * mult + 0.5));
+            frames = targetPad > padding ? targetPad - padding : 0;
         }
         if (SUCCEEDED(hr) && frames) {
             BYTE* p = nullptr;

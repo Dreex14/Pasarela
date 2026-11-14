@@ -8,6 +8,7 @@ Aplicación pequeña para Windows 10/11 que sustituye a OBS cuando solo quieres 
 
 - **Solo audio:** un clic y el sonido de la consola sale por tus auriculares del PC. No abre el vídeo de la capturadora, no usa la GPU y apenas consume (medido: 0,02 % de CPU y ~10 MB de RAM privada).
 - **Mostrar vídeo:** abre una ventana con la imagen de la capturadora para jugar desde el PC o compartirla por Discord. Cerrar el vídeo no corta el audio.
+- **Capturas:** guarda un PNG sin pérdida con la resolución exacta de la capturadora (por ejemplo 2560×1440), sin textos ni bordes de la app. No graba vídeo.
 - Recuerda la capturadora, los auriculares y los ajustes. La calidad se elige sola (la mejor nativa que tiene sentido para tu pantalla).
 - Sin cuentas, sin servidores, sin telemetría, sin grabación. Un único `.exe` portátil.
 
@@ -17,15 +18,19 @@ Aplicación pequeña para Windows 10/11 que sustituye a OBS cuando solo quieres 
 2. Abre `Pasarela.exe`.
 3. Pulsa **Solo audio** para oír la consola, o **Mostrar vídeo** para verla.
 
-En la ventana de vídeo: **doble clic** = pantalla completa, **Esc** = salir de pantalla completa, **clic derecho** = opciones, **M** = silenciar, **T** = siempre encima, **F3** = diagnóstico.
+En la ventana de vídeo: **doble clic** = pantalla completa, **Esc** = salir de pantalla completa, **C** = hacer captura, **clic derecho** = opciones, **M** = silenciar, **T** = siempre encima, **F3** = diagnóstico.
 
 - Al pulsar **Mostrar vídeo**, la ventana principal se oculta y solo queda la del vídeo. Al cerrar el vídeo vuelve sola (el audio sigue sonando).
 - Al **minimizar** la ventana, Pasarela pasa a **segundo plano**: desaparece de la barra de tareas y sigue funcionando con un icono en la bandeja del sistema. Un clic en ese icono la devuelve; con el botón derecho tienes Solo audio, Mostrar vídeo, Silenciar, Detener y Salir.
-- El engranaje abre los **Ajustes**. Ahí puedes activar que, al abrir, reanude lo último que usaste: así oír la consola es abrir el programa y minimizarlo.
+- El engranaje abre los **Ajustes**. Ahí puedes activar que, al abrir, inicie «Solo audio»: así oír la consola es abrir el programa y minimizarlo.
 
 <p align="center">
   <img src="docs/ajustes.png" alt="Ventana de ajustes" width="640">
 </p>
+
+### Capturas de pantalla
+
+Con el vídeo abierto, pulsa **C** (o clic derecho › *Hacer captura*; también está en el menú de la bandeja). Se guarda un PNG en `Imágenes\Pasarela` con la **resolución nativa de la capturadora**, sin escalar a la ventana y sin el diagnóstico ni los avisos de la app. El nombre incluye la fecha, la hora y la resolución. El botón *Abrir carpeta de capturas* de los Ajustes la abre. Pasarela no graba vídeo; para clips usa la herramienta de tu tarjeta gráfica.
 
 ### Compartir por Discord
 
@@ -34,7 +39,6 @@ En la ventana de vídeo: **doble clic** = pantalla completa, **Esc** = salir de 
 
 Notas:
 - Discord no documenta cómo captura el audio de una ventana; Windows (desde la versión 2004) permite capturar el audio de un proceso concreto, y Pasarela reproduce el sonido desde su propio proceso por el mezclador normal de Windows, que es lo que esa captura necesita. **Está pendiente de comprobar con tu Discord** (ver [docs/PRUEBAS.md](docs/PRUEBAS.md)).
-- No actives *Audio en modo exclusivo* si vas a compartir: en ese modo el sonido no pasa por el mezclador de Windows y Discord no puede capturarlo.
 - Si Discord muestra la ventana en negro, activa en Discord la opción de captura de pantalla con la tecnología más reciente (Ajustes › Voz y vídeo › Compartir pantalla). La ventana de Pasarela es una ventana normal de Direct3D 11 (nunca pantalla completa exclusiva), que es lo que esa captura admite.
 - Tus amigos verán la calidad que permitan Discord y tu conexión; Pasarela solo garantiza una buena señal local.
 
@@ -54,10 +58,10 @@ Notas:
 | Búfer de audio | *Bajo* (recomendado), *Ultra bajo* (puede chasquear) o *Seguro*. |
 | Retardo de audio | Retrasa el sonido a propósito si lo oyes antes que la imagen. Por defecto, 0. |
 | Sincronización vertical | Desactivada = cada fotograma se muestra en cuanto llega (mínima latencia, puede haber *tearing*). Activada = sin *tearing*, hasta un refresco más de retardo. |
-| Audio exclusivo | Toma la salida en exclusiva. Discord no podrá capturar el sonido y otras apps no sonarán en esa salida. |
 | Ocultar Pasarela al mostrar el vídeo | Activado por defecto: con vídeo solo se ve su ventana. |
 | Al minimizar, ir a la bandeja | Minimizar = segundo plano. |
 | Al abrir, iniciar Solo audio | Al abrir Pasarela empieza a sonar la consola sin pulsar nada. |
+| Abrir carpeta de capturas | Abre `Imágenes\Pasarela`, donde se guardan las capturas. |
 | Diagnóstico | FPS recibidos y mostrados, fotogramas descartados, tiempos medidos, colchón de audio y cortes. |
 
 La configuración se guarda en `Pasarela.ini` junto al `.exe` (o en `%APPDATA%\Pasarela` si esa carpeta no admite escritura). El registro `Pasarela.log` se reinicia en cada ejecución y nunca se envía a ningún sitio.

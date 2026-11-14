@@ -14,14 +14,12 @@ enum class AudioBufferProfile { Ultra = 0, Low = 1, Safe = 2 };
 struct AudioSettings {
     std::wstring inputId;   // id de endpoint de captura (obligatorio)
     std::wstring outputId;  // vacío = salida predeterminada de Windows
-    bool exclusive = false; // salida en modo exclusivo
     AudioBufferProfile profile = AudioBufferProfile::Low;
     int extraDelayMs = 0;   // retardo añadido a propósito para cuadrar con el vídeo
 };
 
 struct AudioStats {
     bool running = false;
-    bool exclusive = false;
     bool lowLatencyCapture = false;  // IAudioClient3 en la entrada
     bool lowLatencyRender = false;   // IAudioClient3 en la salida
     bool systemResampler = false;    // Windows convierte la frecuencia

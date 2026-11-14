@@ -14,6 +14,7 @@
 #include <commctrl.h>
 #include <dbt.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <uxtheme.h>
 #include <windowsx.h>
 
@@ -37,11 +38,11 @@ namespace {
 enum : int {
     ID_BTN_AUDIO = 101, ID_BTN_VIDEO, ID_BTN_STOP, ID_SLIDER_VOL, ID_BTN_MUTE, ID_CB_VIDEO, ID_BTN_REFRESH,
     ID_CB_AOUT, ID_BTN_ADV, ID_CB_QUALITY, ID_CB_FPS, ID_CB_FORMAT, ID_CB_AIN, ID_TG_AUTO_AUDIO, ID_TG_TRAY,
-    ID_TG_TOPMOST, ID_TG_VSYNC, ID_TG_FULLRANGE, ID_TG_DIAG, ID_TG_EXCLUSIVE, ID_CB_BUFFER, ID_SLIDER_DELAY,
-    ID_BTN_FOLDER, ID_TG_HIDE_VIDEO,
+    ID_TG_TOPMOST, ID_TG_VSYNC, ID_TG_FULLRANGE, ID_TG_DIAG, ID_CB_BUFFER, ID_SLIDER_DELAY,
+    ID_BTN_FOLDER, ID_BTN_SHOTS, ID_TG_HIDE_VIDEO,
 };
 enum : int {
-    IDM_FULLSCREEN = 301, IDM_TOPMOST, IDM_MUTE, IDM_DIAG, IDM_HIDE_VIDEO, IDM_STOP, IDM_SHOW, IDM_AUDIO, IDM_VIDEO,
+    IDM_FULLSCREEN = 301, IDM_TOPMOST, IDM_MUTE, IDM_DIAG, IDM_HIDE_VIDEO, IDM_SCREENSHOT, IDM_STOP, IDM_SHOW, IDM_AUDIO, IDM_VIDEO,
     IDM_EXIT
 };
 enum : UINT_PTR { TIMER_TICK = 1, TIMER_VIDEO_DEVICES, TIMER_AUDIO_DEVICES, TIMER_AUDIO_DEFAULT, TIMER_CURSOR };
@@ -151,6 +152,8 @@ private:
     void CreateVideoWindow();
     void DestroyVideoWindow();
     void ToggleFullscreen();
+    void TakeScreenshot();
+    std::wstring ScreenshotFolder() const;
     void SetTopmost(bool on);
     void ShowMenu(HWND owner, POINT pt, bool tray);
 
@@ -182,9 +185,9 @@ private:
 
     HWND btnAudio_{}, btnVideo_{}, btnStop_{}, slVolume_{}, btnMute_{}, cbVideo_{}, btnRefresh_{}, cbOut_{}, btnAdv_{};
     HWND cbQuality_{}, cbFps_{}, cbFormat_{}, cbIn_{}, tgAutoAudio_{}, tgTray_{}, tgTopmost_{}, tgVsync_{}, tgFullRange_{};
-    HWND tgDiag_{}, tgExclusive_{}, cbBuffer_{}, slDelay_{}, btnFolder_{}, tgHideVideo_{};
+    HWND tgDiag_{}, cbBuffer_{}, slDelay_{}, btnFolder_{}, btnShots_{}, tgHideVideo_{};
 
-    RECT rcTitle_{}, rcSubtitle_{}, rcVolumeValue_{}, rcStatus_{}, rcTip_{}, rcExclusiveWarn_{}, rcLblDelay_{},
+    RECT rcTitle_{}, rcSubtitle_{}, rcVolumeValue_{}, rcStatus_{}, rcTip_{}, rcLblDelay_{},
         rcDiag_{};
     std::wstring statusText_;
     ui::Color statusColor_ = ui::theme::textDim;
@@ -378,12 +381,11 @@ void App::CreateControls() {
     cbIn_ = MakeCombo(w, ID_CB_AIN);
     cbBuffer_ = MakeCombo(w, ID_CB_BUFFER);
     slDelay_ = ui::CreateSlider(w, ID_SLIDER_DELAY, 0, 300, s_.audioDelayMs);
-    tgExclusive_ = MakeButton(w, ID_TG_EXCLUSIVE, L"Audio en modo exclusivo");
     tgDiag_ = MakeButton(w, ID_TG_DIAG, L"Mostrar diagnóstico");
+    btnShots_ = MakeButton(w, ID_BTN_SHOTS, L"Abrir carpeta de capturas");
     btnFolder_ = MakeButton(w, ID_BTN_FOLDER, L"Abrir carpeta de configuración");
     AddTooltip(w, tgVsync_, L"Sin tearing, a cambio de hasta un refresco más de retraso");
     AddTooltip(w, tgFullRange_, L"Actívalo solo si ves los negros grisáceos o los colores lavados");
-    AddTooltip(w, tgExclusive_, L"Un poco menos de latencia, pero Discord no podrá compartir el sonido");
 
     SetToggle(tgVsync_, s_.vsync);
     SetToggle(tgFullRange_, s_.fullRange);
@@ -391,7 +393,6 @@ void App::CreateControls() {
     SetToggle(tgHideVideo_, s_.hideOnVideo);
     SetToggle(tgTray_, s_.tray);
     SetToggle(tgAutoAudio_, s_.autoAudio);
-    SetToggle(tgExclusive_, s_.exclusive);
     SetToggle(tgDiag_, s_.diagnostics);
 
     for (const wchar_t* t : {L"Ultra bajo (puede chasquear)", L"Bajo (recomendado)", L"Seguro (más estable)"})
@@ -557,16 +558,10 @@ void App::LayoutSettings() {
     add({x, y, x + colW, y + P(18)}, L"Retrásalo si oyes el sonido antes que la imagen.", 11.5f, ui::theme::textDim,
         false);
     y += P(18) + P(16);
-    place(tgExclusive_, x, y, colW, P(30));
-    y += P(34);
-    if (s_.exclusive) {
-        rcExclusiveWarn_ = {x + P(46), y, x + colW, y + P(48)};
-        y += P(52);
-    } else {
-        rcExclusiveWarn_ = {};
-    }
     place(tgDiag_, x, y, colW, P(30));
     y += P(36) + P(14);
+    place(btnShots_, x, y, colW, P(38));
+    y += P(38) + P(10);
     place(btnFolder_, x, y, colW, P(38));
     y += P(38);
     int bottom = std::max(leftBottom, y) + P(22);
@@ -658,9 +653,6 @@ void App::PaintSettings(HDC dc) {
     p.Fill(rcSettingsSep_, border);
     PaintLabels(p, settingsLabels_);
     p.Text(Fmt(L"Retardo de audio: %d ms", s_.audioDelayMs), rcLblDelay_, 13.0f * scale_, text);
-    if (rcExclusiveWarn_.bottom > rcExclusiveWarn_.top)
-        p.Text(L"Discord no podrá transmitir el sonido y otras apps no sonarán en esa salida.", rcExclusiveWarn_,
-               11.5f * scale_, warn, ui::Painter::Left, false, true);
 }
 
 LRESULT App::SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
@@ -778,7 +770,7 @@ void App::DrawItem(const DRAWITEMSTRUCT* d) {
         if (hover) p.Round(r, radius, surfaceHover);
         p.Text(L"\uE713", r, 15.0f * scale_, hover ? text : textDim,
                ui::Painter::Center, false, false, ui::IconFont());
-    } else if (id == ID_BTN_FOLDER) {
+    } else if (id == ID_BTN_FOLDER || id == ID_BTN_SHOTS) {
         p.Round(r, radius, hover ? surfaceHover : surface);
         p.Text(label, r, 13.0f * scale_, text, ui::Painter::Center);
     } else {
@@ -1213,7 +1205,7 @@ HRESULT App::StartVideo() {
         return E_APP_GPU;
     }
     ApplyRenderOptions();
-    renderer_.SetHintText(L"Doble clic: pantalla completa · Esc: salir · Clic derecho: opciones", 4000);
+    renderer_.SetHintText(L"Doble clic: pantalla completa · Esc: salir · C: captura · Clic derecho: opciones", 4000);
     capture_ = VideoCapture::Create();
     hr = capture_->Start(d->symlink, fmt, &renderer_);
     if (FAILED(hr)) {
@@ -1284,7 +1276,6 @@ bool App::StartAudio(bool reportErrors) {
     AudioSettings as;
     as.inputId = in;
     as.outputId = ResolveAudioOutput();
-    as.exclusive = s_.exclusive;
     as.profile = AudioBufferProfile(s_.bufferProfile);
     as.extraDelayMs = s_.audioDelayMs;
     std::wstring detail;
@@ -1504,6 +1495,24 @@ void App::ToggleFullscreen() {
     }
 }
 
+std::wstring App::ScreenshotFolder() const {
+    std::wstring dir;
+    wchar_t* pictures = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Pictures, 0, nullptr, &pictures))) {
+        dir = std::wstring(pictures) + L"\\Pasarela";
+        CoTaskMemFree(pictures);
+    } else {
+        dir = DataDirectory() + L"\\Capturas";
+    }
+    CreateDirectoryW(dir.c_str(), nullptr);
+    return dir;
+}
+
+void App::TakeScreenshot() {
+    if (!videoActive_) return;
+    renderer_.RequestScreenshot(ScreenshotFolder());
+}
+
 void App::SetTopmost(bool on) {
     s_.topmost = on;
     SetToggle(tgTopmost_, on);
@@ -1519,10 +1528,13 @@ void App::ShowMenu(HWND owner, POINT pt, bool tray) {
         AppendMenuW(m, MF_STRING | (session_ == kAudio ? MF_CHECKED : 0), IDM_AUDIO, L"Solo audio");
         AppendMenuW(m, MF_STRING | (session_ == kVideo ? MF_CHECKED : 0), IDM_VIDEO, L"Mostrar vídeo");
         AppendMenuW(m, MF_STRING | (s_.muted ? MF_CHECKED : 0), IDM_MUTE, L"Silenciar");
+        if (session_ == kVideo) AppendMenuW(m, MF_STRING, IDM_SCREENSHOT, L"Hacer captura");
         AppendMenuW(m, MF_STRING | (session_ == kOff ? MF_GRAYED : 0), IDM_STOP, L"Detener");
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING, IDM_EXIT, L"Salir");
     } else {
+        AppendMenuW(m, MF_STRING, IDM_SCREENSHOT, L"Hacer captura\tC");
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING | (fullscreen_ ? MF_CHECKED : 0), IDM_FULLSCREEN, L"Pantalla completa\tDoble clic");
         AppendMenuW(m, MF_STRING | (s_.topmost ? MF_CHECKED : 0), IDM_TOPMOST, L"Siempre encima\tT");
         AppendMenuW(m, MF_STRING | (s_.muted ? MF_CHECKED : 0), IDM_MUTE, L"Silenciar\tM");
@@ -1563,6 +1575,7 @@ LRESULT App::VideoProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_KEYDOWN:
             if (wp == VK_ESCAPE && fullscreen_) ToggleFullscreen();
             else if (wp == VK_F11) ToggleFullscreen();
+            else if (wp == 'C') OnCommand(IDM_SCREENSHOT, 0);
             else if (wp == 'M') OnCommand(IDM_MUTE, 0);
             else if (wp == 'T') OnCommand(IDM_TOPMOST, 0);
             else if (wp == VK_F3) OnCommand(IDM_DIAG, 0);
@@ -1683,11 +1696,7 @@ std::wstring App::AudioErrorText(HRESULT hr) const {
         return L"Windows bloquea la entrada de audio. Activa Configuración › Privacidad y seguridad › Micrófono › "
                L"«Permitir que las aplicaciones de escritorio accedan al micrófono».";
     if (hr == AUDCLNT_E_DEVICE_IN_USE)
-        return L"El dispositivo de audio lo está usando otra aplicación en modo exclusivo.";
-    if (!input && s_.exclusive && hr == AUDCLNT_E_UNSUPPORTED_FORMAT)
-        return Fmt(L"La salida no admite %u Hz en modo exclusivo. Desactiva el audio exclusivo o cambia la "
-                   L"frecuencia del dispositivo en Windows.",
-                   audio_.SampleRate());
+        return L"Otra aplicación tiene el dispositivo de audio en modo exclusivo. Ciérrala e inténtalo de nuevo.";
     if (hr == E_NOTFOUND || hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND) || hr == AUDCLNT_E_DEVICE_INVALIDATED)
         return input ? L"La entrada de audio de la capturadora no está disponible." : L"La salida de audio no está disponible.";
     return Fmt(input ? L"No se pudo abrir la entrada de audio (código %s)." : L"No se pudo abrir la salida de audio (código %s).",
@@ -1712,7 +1721,7 @@ std::wstring App::BuildAudioDiagnostics() {
     if (!audioActive_) return L"Audio: parado";
     AudioStats a = audio_.Stats();
     std::wstring s = Fmt(L"Audio %s: %u Hz · %u→%u canales\nEntrada %s %.2f ms · Salida %s %.2f ms (búfer %.2f)%s",
-                         a.exclusive ? L"exclusivo" : L"compartido", a.sampleRate, a.inChannels, a.outChannels,
+                         L"compartido", a.sampleRate, a.inChannels, a.outChannels,
                          a.lowLatencyCapture ? L"baja latencia" : L"estándar", a.capturePeriodMs,
                          a.lowLatencyRender ? L"baja latencia" : L"estándar", a.renderPeriodMs, a.renderBufferMs,
                          a.systemResampler ? L" · Windows convierte la frecuencia" : L"");
@@ -1795,6 +1804,10 @@ void App::OnCommand(int id, int code) {
         case IDM_SHOW: RestoreFromTray(); return;
         case IDM_EXIT: SendMessageW(hwnd_, WM_CLOSE, 0, 0); return;
         case IDM_FULLSCREEN: ToggleFullscreen(); return;
+        case IDM_SCREENSHOT: TakeScreenshot(); return;
+        case ID_BTN_SHOTS:
+            ShellExecuteW(hwnd_, L"open", ScreenshotFolder().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            return;
         case ID_BTN_MUTE:
         case IDM_MUTE:
             s_.muted = !s_.muted;
@@ -1830,12 +1843,6 @@ void App::OnCommand(int id, int code) {
             s_.fullRange = !s_.fullRange;
             SetToggle(tgFullRange_, s_.fullRange);
             ApplyRenderOptions();
-            return;
-        case ID_TG_EXCLUSIVE:
-            s_.exclusive = !s_.exclusive;
-            SetToggle(tgExclusive_, s_.exclusive);
-            LayoutSettings();
-            RestartAudio();
             return;
     }
     if (code != CBN_SELCHANGE || populating_) return;

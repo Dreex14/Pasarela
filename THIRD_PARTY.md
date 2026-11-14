@@ -19,7 +19,7 @@ El código de Pasarela es propio (MIT, Dreex). No incluye código copiado de otr
 
 ## Componentes de Windows usados en tiempo de ejecución
 
-Media Foundation, WASAPI, Direct3D 11, DXGI, Direct2D, DirectWrite y las fuentes «Segoe UI» y «Segoe Fluent Icons / Segoe MDL2 Assets». Forman parte de Windows; no se incluyen en el programa.
+Media Foundation, WASAPI, Direct3D 11, DXGI, Direct2D, DirectWrite, Windows Imaging Component (PNG) y las fuentes «Segoe UI» y «Segoe Fluent Icons / Segoe MDL2 Assets». Forman parte de Windows; no se incluyen en el programa.
 
 ## Proyectos estudiados como referencia (sin reutilizar su código)
 

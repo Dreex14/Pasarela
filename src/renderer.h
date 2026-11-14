@@ -7,6 +7,7 @@
 #include <d3d11_1.h>
 #include <dwrite.h>
 #include <dxgi1_5.h>
+#include <wincodec.h>
 
 #include <future>
 #include <thread>
@@ -44,6 +45,9 @@ public:
     void SetDiagnosticsText(const std::wstring& t); // panel de diagnóstico
     void SetHintText(const std::wstring& t, int ms);
     void NotifyResize();
+    // Guarda en `folder` un PNG sin pérdida del último fotograma, a la resolución
+    // nativa de la capturadora (sin escalar y sin textos superpuestos).
+    void RequestScreenshot(const std::wstring& folder);
     RenderStats Stats();
 
     // FrameSink (lo llama el hilo de Media Foundation)
@@ -67,10 +71,15 @@ private:
     void ConvertToIntermediate(const FrameFormat& f);
     void DrawFrame();
     void DrawOverlay();
+    void DoScreenshot();
 
     HWND hwnd_ = nullptr;
     HWND errorWindow_ = nullptr;
     std::thread thread_;
+    std::thread shotThread_;   // codifica y escribe el PNG sin frenar el render
+    std::mutex shotMutex_;
+    std::wstring shotFolder_;
+    bool shotPending_ = false;
     std::atomic<bool> stop_{false};
     HANDLE frameEvent_ = nullptr, wakeEvent_ = nullptr;
     std::atomic<bool> resizePending_{true};

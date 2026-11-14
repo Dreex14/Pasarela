@@ -1,6 +1,6 @@
 # Compila Pasarela.exe (portátil, sin dependencias) con llvm-mingw.
 # Uso:  powershell -ExecutionPolicy Bypass -File build.ps1 [-Debug]
-param([switch]$Debug, [string]$Out = "")
+param([switch]$Debug, [string]$Out = "", [switch]$Prueba)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $tc = Get-ChildItem -Directory (Join-Path $root 'tools') -Filter 'llvm-mingw-*' | Select-Object -First 1
@@ -28,8 +28,9 @@ try {
                '-D_WIN32_WINNT=0x0A00', '-DWINVER=0x0A00', '-static', '-s') + $opt
     $libs = @('-ld3d11', '-ldxgi', '-ld2d1', '-ldwrite', '-ld3dcompiler_47', '-lmfplat', '-lmf', '-lmfreadwrite',
               '-lmfuuid', '-lole32', '-loleaut32', '-luuid', '-lavrt', '-lcomctl32', '-luxtheme', '-ldwmapi',
-              '-lshell32', '-lcfgmgr32', '-lpropsys', '-lwinmm', '-lshlwapi', '-lgdi32', '-luser32')
+              '-lshell32', '-lcfgmgr32', '-lpropsys', '-lwinmm', '-lshlwapi', '-lwindowscodecs', '-lgdi32', '-luser32')
     if ($Debug) { $flags = $flags | Where-Object { $_ -ne '-s' } }
+    if ($Prueba) { $flags += '-DPASARELA_PRUEBA' }
     $src = Get-ChildItem *.cpp | ForEach-Object { $_.Name }
     $exe = if ($Out) { $Out } else { Join-Path $dist "Pasarela.exe" }
     & $cxx @flags @src (Join-Path $obj "app.res.o") @libs -o $exe

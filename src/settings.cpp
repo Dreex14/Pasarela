@@ -44,7 +44,6 @@ void Settings::Load() {
     topmost = ReadInt(a, L"SiempreEncima", 0) != 0;
     tray = ReadInt(a, L"Bandeja", 1) != 0;
     diagnostics = ReadInt(a, L"Diagnostico", 0) != 0;
-    exclusive = ReadInt(a, L"AudioExclusivo", 0) != 0;
     bufferProfile = Clamp(ReadInt(a, L"BuferAudio", 1), 0, 2);
     audioDelayMs = Clamp(ReadInt(a, L"RetardoAudioMs", 0), 0, 300);
     hideOnVideo = ReadInt(a, L"OcultarConVideo", 1) != 0;
@@ -88,7 +87,6 @@ void Settings::Save() const {
     WriteInt(a, L"SiempreEncima", topmost);
     WriteInt(a, L"Bandeja", tray);
     WriteInt(a, L"Diagnostico", diagnostics);
-    WriteInt(a, L"AudioExclusivo", exclusive);
     WriteInt(a, L"BuferAudio", bufferProfile);
     WriteInt(a, L"RetardoAudioMs", audioDelayMs);
     WriteInt(a, L"OcultarConVideo", hideOnVideo);

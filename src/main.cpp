@@ -9,7 +9,11 @@
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     // Una sola instancia: la capturadora solo admite un programa a la vez.
+#ifdef PASARELA_PRUEBA  // compilación de pruebas: puede convivir con la instalada
+    HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\Pasarela.Prueba");
+#else
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\Pasarela.InstanciaUnica");
+#endif
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND existing = FindWindowW(L"PasarelaPrincipal", nullptr);
         if (existing) {

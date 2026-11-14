@@ -32,7 +32,7 @@ Conclusión: para igualar a OBS basta con capturar sin búferes intermedios, mos
 - Un único `.exe` estático de ~650 KB, sin runtime que instalar.
 - **Media Foundation** en lugar de DirectShow: las capturadoras UVC (como la UGREEN 25173) funcionan con MF de forma nativa, se puede elegir el modo exacto que declara el driver y no hace falta registrar filtros. DirectShow quedaría solo para capturadoras PCIe antiguas sin driver AVStream (no incluido en esta versión).
 - **Direct3D 11** y no 12: un cuadro por fotograma no se beneficia de D3D12 y D3D11 es más simple y compatible con cualquier GPU (NVIDIA, AMD, Intel). No se usa ninguna función exclusiva de NVIDIA.
-- **WASAPI** compartido por eventos (con `IAudioClient3` cuando el driver lo admite) y exclusivo como opción.
+- **WASAPI** compartido por eventos (con `IAudioClient3` cuando el driver lo admite). No se ofrece modo exclusivo: para escuchar una consola mientras juegas no aporta nada apreciable, bloquea la salida para el resto de aplicaciones e impide que Discord capture el sonido.
 - **Interfaz Win32 propia**, dibujada con Direct2D por software: la ventana principal no carga la GPU, de modo que «Solo audio» no toca Direct3D.
 
 ## 3. Módulos
@@ -60,6 +60,7 @@ capturadora ─USB─▶ driver UVC ─▶ Media Foundation (Source Reader, 1 pe
 - **No se acumulan fotogramas viejos:** si llega uno nuevo antes de mostrar el anterior, el anterior se descarta (se cuenta como «descartado por viejo»).
 - **Una sola copia:** con capturadoras USB el driver entrega memoria de sistema; subirla a la GPU es inevitable. Medido: 0,25 ms a 1080p NV12.
 - **Present:** sin VSync se presenta en cuanto está listo (con *tearing* si el sistema lo permite); con VSync, sincronizado. Swap chain `FLIP_DISCARD` y `SetMaximumFrameLatency(1)`.
+- **Capturas:** el fotograma ya convertido a RGB a la resolución nativa (antes de escalarlo a la ventana y de dibujar textos) se copia a una textura de lectura y se codifica como PNG de 24 bits con WIC en un hilo aparte, sin frenar el vídeo.
 - **Pantalla completa sin bordes**, nunca exclusiva: misma latencia con flip-model y Discord puede capturar la ventana.
 - **Modo automático:** ~60 FPS, la mayor resolución que cabe en la pantalla, NV12 > YUY2 > RGB > MJPEG. Si un modo no arranca (p. ej. 4K60 sin comprimir supera el ancho de banda USB, error `0xC00D3704`) se prueba el siguiente.
 
@@ -74,7 +75,6 @@ entrada HDMI de la capturadora (WASAPI, evento) ─▶ float ─▶ anillo SPSC
 - **Deriva de reloj:** entrada y salida son aparatos distintos y sus relojes nunca coinciden. Un corrector proporcional ajusta la velocidad de lectura como máximo ±0,3 % (interpolación lineal, inaudible en la práctica) para mantener el colchón en su objetivo. **Así el retardo no crece en sesiones largas.**
 - **Atascos:** si sobran más de 40 ms se descarta lo viejo de golpe (con rampa corta); si el anillo se vacía, se vuelve a cebar hasta el objetivo. Ambos se cuentan en el diagnóstico.
 - **Frecuencias distintas** entre entrada y salida: Windows convierte (`AUTOCONVERTPCM`), con algo más de latencia; se indica en el diagnóstico.
-- **Exclusivo:** busca un formato que el hardware acepte tal cual (float/24/16 bits) al período mínimo del dispositivo.
 
 ## 6. Latencias: qué es cada una y qué se puede medir
 
@@ -94,7 +94,7 @@ El diagnóstico marca como **[medido]** lo medido y como **«estimada (no medida
 ## 7. Discord
 
 - **Vídeo:** Discord captura ventanas con las APIs de captura de Windows. Una ventana Direct3D 11 flip-model normal o sin bordes es capturable; una pantalla completa exclusiva o una ventana minimizada no. Pasarela nunca usa pantalla completa exclusiva y sigue presentando aunque la ventana quede tapada.
-- **Audio:** Discord no documenta su método. Windows ofrece desde 10 2004 la captura de audio por proceso (*application loopback*), que solo ve lo que el proceso reproduce por el mezclador compartido. Pasarela reproduce el sonido desde su propio proceso en modo compartido, que es lo que necesita esa captura. En modo exclusivo el audio no pasa por el mezclador y no puede capturarse. **No se instala ningún dispositivo virtual ni se automatiza Discord.**
+- **Audio:** Discord no documenta su método. Windows ofrece desde 10 2004 la captura de audio por proceso (*application loopback*), que solo ve lo que el proceso reproduce por el mezclador compartido. Pasarela reproduce el sonido desde su propio proceso en modo compartido, que es lo que necesita esa captura. Por eso Pasarela no ofrece modo exclusivo: el audio siempre pasa por el mezclador. **No se instala ningún dispositivo virtual ni se automatiza Discord.**
 - **Eco y bucles:** Discord captura el audio de la aplicación, no tu micrófono ni tus auriculares, así que no se duplica. Si compartes la *pantalla entera* con sonido, Discord captura todo el audio del sistema (incluido el de Pasarela): tampoco se duplica, pero incluye el resto de programas.
 
 ## 8. Recuperación ante errores

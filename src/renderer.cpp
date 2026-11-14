@@ -53,6 +53,36 @@ float4 PSRGB(V i) : SV_Target { return float4(t0.Load(int3(int2(i.p.xy), 0)).rgb
 float4 PSPresent(V i) : SV_Target { return float4(t0.SampleLevel(s0, i.uv, 0).rgb, 1); }
 )";
 
+// Escribe un PNG de 24 bits (sin canal alfa) a partir de píxeles RGBA.
+HRESULT SavePng(const std::wstring& path, const std::vector<uint8_t>& rgba, UINT w, UINT h) {
+    std::vector<uint8_t> bgr(size_t(w) * h * 3);
+    for (size_t i = 0, n = size_t(w) * h; i < n; ++i) {
+        bgr[i * 3 + 0] = rgba[i * 4 + 2];
+        bgr[i * 3 + 1] = rgba[i * 4 + 1];
+        bgr[i * 3 + 2] = rgba[i * 4 + 0];
+    }
+    ComPtr<IWICImagingFactory> factory;
+    HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+    if (FAILED(hr)) return hr;
+    ComPtr<IWICStream> stream;
+    if (FAILED(hr = factory->CreateStream(&stream))) return hr;
+    if (FAILED(hr = stream->InitializeFromFilename(path.c_str(), GENERIC_WRITE))) return hr;
+    ComPtr<IWICBitmapEncoder> encoder;
+    if (FAILED(hr = factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder))) return hr;
+    if (FAILED(hr = encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache))) return hr;
+    ComPtr<IWICBitmapFrameEncode> frame;
+    ComPtr<IPropertyBag2> props;
+    if (FAILED(hr = encoder->CreateNewFrame(&frame, &props))) return hr;
+    if (FAILED(hr = frame->Initialize(props.Get()))) return hr;
+    if (FAILED(hr = frame->SetSize(w, h))) return hr;
+    WICPixelFormatGUID format = GUID_WICPixelFormat24bppBGR;
+    if (FAILED(hr = frame->SetPixelFormat(&format))) return hr;
+    if (format != GUID_WICPixelFormat24bppBGR) return WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT;
+    if (FAILED(hr = frame->WritePixels(h, w * 3, UINT(bgr.size()), bgr.data()))) return hr;
+    if (FAILED(hr = frame->Commit())) return hr;
+    return encoder->Commit();
+}
+
 struct Constants {
     float yScale, yOffset, pad0, pad1;
     float rv, gu, gv, bu;
@@ -119,9 +149,14 @@ void Renderer::Stop() {
     stop_ = true;
     SetEvent(wakeEvent_);
     thread_.join();
+    if (shotThread_.joinable()) shotThread_.join();
     CloseHandle(frameEvent_);
     CloseHandle(wakeEvent_);
     frameEvent_ = wakeEvent_ = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(shotMutex_);
+        shotPending_ = false;
+    }
     std::lock_guard<std::mutex> lock(mailboxMutex_);
     mailbox_ = Pending{};
     hasPending_ = false;
@@ -161,6 +196,73 @@ void Renderer::SetHintText(const std::wstring& t, int ms) {
         hintUntil_ = QpcNow() + f.QuadPart * ms / 1000;
     }
     if (wakeEvent_) SetEvent(wakeEvent_);
+}
+
+void Renderer::RequestScreenshot(const std::wstring& folder) {
+    {
+        std::lock_guard<std::mutex> lock(shotMutex_);
+        shotFolder_ = folder;
+        shotPending_ = true;
+    }
+    if (wakeEvent_) SetEvent(wakeEvent_);
+}
+
+void Renderer::DoScreenshot() {
+    std::wstring folder;
+    {
+        std::lock_guard<std::mutex> lock(shotMutex_);
+        if (!shotPending_) return;
+        shotPending_ = false;
+        folder = shotFolder_;
+    }
+    if (!hasContent_ || !texRgb_ || !srcW_ || !srcH_) {
+        SetHintText(L"Todavía no hay imagen que capturar", 2500);
+        return;
+    }
+    // La textura intermedia ya es el fotograma completo convertido a RGB a la
+    // resolución nativa: se copia a una textura de lectura y se guarda tal cual.
+    D3D11_TEXTURE2D_DESC td{};
+    texRgb_->GetDesc(&td);
+    td.Usage = D3D11_USAGE_STAGING;
+    td.BindFlags = 0;
+    td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    td.MiscFlags = 0;
+    ComPtr<ID3D11Texture2D> staging;
+    D3D11_MAPPED_SUBRESOURCE m{};
+    HRESULT hr = device_->CreateTexture2D(&td, nullptr, &staging);
+    if (SUCCEEDED(hr)) {
+        ctx_->CopyResource(staging.Get(), texRgb_.Get());
+        hr = ctx_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &m);
+    }
+    if (FAILED(hr)) {
+        Log(L"Captura: no se pudo leer el fotograma (%s)", HrHex(hr).c_str());
+        SetHintText(Fmt(L"No se pudo hacer la captura (código %s)", HrHex(hr).c_str()), 3500);
+        return;
+    }
+    const UINT w = td.Width, h = td.Height;
+    std::vector<uint8_t> pixels(size_t(w) * h * 4);
+    for (UINT r = 0; r < h; ++r)
+        std::memcpy(&pixels[size_t(r) * w * 4], static_cast<const uint8_t*>(m.pData) + size_t(r) * m.RowPitch,
+                    size_t(w) * 4);
+    ctx_->Unmap(staging.Get(), 0);
+
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    std::wstring path = Fmt(L"%s\\Pasarela_%04u%02u%02u_%02u%02u%02u_%ux%u.png", folder.c_str(), st.wYear, st.wMonth,
+                           st.wDay, st.wHour, st.wMinute, st.wSecond, w, h);
+    if (shotThread_.joinable()) shotThread_.join();
+    shotThread_ = std::thread([this, path, w, h, px = std::move(pixels)] {
+        HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        HRESULT r = SavePng(path, px, w, h);
+        if (SUCCEEDED(com)) CoUninitialize();
+        if (SUCCEEDED(r)) {
+            Log(L"Captura guardada: %s", path.c_str());
+            SetHintText(Fmt(L"Captura guardada · %u×%u", w, h), 3000);
+        } else {
+            Log(L"Captura: error al guardar %s (%s)", path.c_str(), HrHex(r).c_str());
+            SetHintText(Fmt(L"No se pudo guardar la captura (código %s)", HrHex(r).c_str()), 3500);
+        }
+    });
 }
 
 void Renderer::NotifyResize() {
@@ -619,6 +721,7 @@ void Renderer::Thread(std::promise<HRESULT>* ready) {
             frame.sample.Reset();  // devolver el buffer al driver cuanto antes
         }
         int64_t t1 = QpcNow();
+        DoScreenshot();
         DrawFrame();
         DrawOverlay();
 
