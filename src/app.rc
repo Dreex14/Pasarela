@@ -1,0 +1,31 @@
+#include <windows.h>
+#include "resource.h"
+
+IDI_APP ICON "../assets/pasarela.ico"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "pasarela.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0,1,0,0
+PRODUCTVERSION 0,1,0,0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "0C0A04B0"
+    BEGIN
+      VALUE "CompanyName", "Dreex"
+      VALUE "FileDescription", "Pasarela - capturadora HDMI con mínima latencia"
+      VALUE "FileVersion", "0.1.0"
+      VALUE "InternalName", "Pasarela"
+      VALUE "LegalCopyright", "Copyright (c) 2026 Dreex. Licencia MIT."
+      VALUE "OriginalFilename", "Pasarela.exe"
+      VALUE "ProductName", "Pasarela"
+      VALUE "ProductVersion", "0.1.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0C0A, 1200
+  END
+END

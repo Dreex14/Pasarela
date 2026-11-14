@@ -1,0 +1,5 @@
+dist/
+build/
+tools/llvm-mingw-*/
+*.ini
+*.log
