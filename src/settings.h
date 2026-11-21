@@ -25,6 +25,7 @@ struct Settings {
     int bufferProfile = 1;
     int audioDelayMs = 0;
     bool hideOnVideo = true;    // ocultar la ventana principal al mostrar el vídeo
+    bool keepDisplayOnAudio = false;  // «Solo audio» también mantiene la pantalla encendida
 
     // Ventanas
     RECT videoRect{0, 0, 0, 0};

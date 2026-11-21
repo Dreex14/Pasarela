@@ -39,7 +39,7 @@ enum : int {
     ID_BTN_AUDIO = 101, ID_BTN_VIDEO, ID_BTN_STOP, ID_SLIDER_VOL, ID_BTN_MUTE, ID_CB_VIDEO, ID_BTN_REFRESH,
     ID_CB_AOUT, ID_BTN_ADV, ID_CB_QUALITY, ID_CB_FPS, ID_CB_FORMAT, ID_CB_AIN, ID_TG_AUTO_AUDIO, ID_TG_TRAY,
     ID_TG_TOPMOST, ID_TG_VSYNC, ID_TG_FULLRANGE, ID_TG_DIAG, ID_CB_BUFFER, ID_SLIDER_DELAY,
-    ID_BTN_FOLDER, ID_BTN_SHOTS, ID_TG_HIDE_VIDEO,
+    ID_BTN_FOLDER, ID_BTN_SHOTS, ID_TG_HIDE_VIDEO, ID_TG_KEEP_DISPLAY,
 };
 enum : int {
     IDM_FULLSCREEN = 301, IDM_TOPMOST, IDM_MUTE, IDM_DIAG, IDM_HIDE_VIDEO, IDM_SCREENSHOT, IDM_STOP, IDM_SHOW, IDM_AUDIO, IDM_VIDEO,
@@ -185,9 +185,9 @@ private:
 
     HWND btnAudio_{}, btnVideo_{}, btnStop_{}, slVolume_{}, btnMute_{}, cbVideo_{}, btnRefresh_{}, cbOut_{}, btnAdv_{};
     HWND cbQuality_{}, cbFps_{}, cbFormat_{}, cbIn_{}, tgAutoAudio_{}, tgTray_{}, tgTopmost_{}, tgVsync_{}, tgFullRange_{};
-    HWND tgDiag_{}, cbBuffer_{}, slDelay_{}, btnFolder_{}, btnShots_{}, tgHideVideo_{};
+    HWND tgDiag_{}, cbBuffer_{}, slDelay_{}, btnFolder_{}, btnShots_{}, tgHideVideo_{}, tgKeepDisplay_{};
 
-    RECT rcTitle_{}, rcSubtitle_{}, rcVolumeValue_{}, rcStatus_{}, rcTip_{}, rcLblDelay_{},
+    RECT rcTitle_{}, rcSubtitle_{}, rcVersion_{}, rcVolumeValue_{}, rcStatus_{}, rcTip_{}, rcLblDelay_{},
         rcDiag_{};
     std::wstring statusText_;
     ui::Color statusColor_ = ui::theme::textDim;
@@ -378,6 +378,8 @@ void App::CreateControls() {
     tgHideVideo_ = MakeButton(w, ID_TG_HIDE_VIDEO, L"Ocultar Pasarela al mostrar el vídeo");
     tgTray_ = MakeButton(w, ID_TG_TRAY, L"Al minimizar, ir a la bandeja");
     tgAutoAudio_ = MakeButton(w, ID_TG_AUTO_AUDIO, L"Al abrir, iniciar Solo audio");
+    tgKeepDisplay_ = MakeButton(w, ID_TG_KEEP_DISPLAY, L"Pantalla encendida en «Solo audio»");
+    AddTooltip(w, tgKeepDisplay_, L"Evita que Windows apague la pantalla mientras suena el audio");
     cbIn_ = MakeCombo(w, ID_CB_AIN);
     cbBuffer_ = MakeCombo(w, ID_CB_BUFFER);
     slDelay_ = ui::CreateSlider(w, ID_SLIDER_DELAY, 0, 300, s_.audioDelayMs);
@@ -393,6 +395,7 @@ void App::CreateControls() {
     SetToggle(tgHideVideo_, s_.hideOnVideo);
     SetToggle(tgTray_, s_.tray);
     SetToggle(tgAutoAudio_, s_.autoAudio);
+    SetToggle(tgKeepDisplay_, s_.keepDisplayOnAudio);
     SetToggle(tgDiag_, s_.diagnostics);
 
     for (const wchar_t* t : {L"Ultra bajo (puede chasquear)", L"Bajo (recomendado)", L"Seguro (más estable)"})
@@ -426,7 +429,9 @@ void App::Layout() {
     };
 
     // Cabecera: título y botones de icono
-    rcTitle_ = {m, y, m + width - icon - P(8), y + P(32)};
+    // La versión va a la izquierda del engranaje, para identificar rápido qué compilación es.
+    rcVersion_ = {m + width - icon - P(8) - P(70), y, m + width - icon - P(8), y + P(32)};
+    rcTitle_ = {m, y, rcVersion_.left - P(4), y + P(32)};
     place(btnAdv_, m + width - icon, y, icon, icon);
     y += P(32);
     rcSubtitle_ = {m, y, m + width - icon - P(8), y + P(20)};
@@ -532,7 +537,7 @@ void App::LayoutSettings() {
     y += P(20);
     add({x, y, x + colW, y + P(18)}, L"VENTANA", 11.5f, ui::theme::textDim, true);
     y += P(28);
-    for (HWND t : {tgHideVideo_, tgTray_, tgAutoAudio_}) {
+    for (HWND t : {tgHideVideo_, tgTray_, tgAutoAudio_, tgKeepDisplay_}) {
         place(t, x, y, colW, P(30));
         y += P(36);
     }
@@ -616,6 +621,7 @@ void App::Paint(HDC dc) {
     using namespace ui::theme;
     p.Fill(rc, bg);
     p.Text(APP_NAME, rcTitle_, 24.0f * scale_, text, ui::Painter::Left, true);
+    p.Text(std::wstring(L"v") + APP_VERSION, rcVersion_, 12.0f * scale_, textDim, ui::Painter::Right);
     const VideoDevice* dev = SelectedVideoDevice();
     p.Text(dev ? dev->name : L"Capturadora HDMI", rcSubtitle_, 13.0f * scale_, textDim);
     PaintLabels(p, mainLabels_);
@@ -1319,7 +1325,8 @@ void App::UpdateExecutionState() {
     if (session_ == kVideo)
         SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
     else if (session_ == kAudio)
-        SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+        SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED |
+                                (s_.keepDisplayOnAudio ? ES_DISPLAY_REQUIRED : 0));
     else
         SetThreadExecutionState(ES_CONTINUOUS);
 }
@@ -1837,6 +1844,11 @@ void App::OnCommand(int id, int code) {
             ShellExecuteW(hwnd_, L"open", DataDirectory().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             return;
         case ID_TG_AUTO_AUDIO: s_.autoAudio = !s_.autoAudio; SetToggle(tgAutoAudio_, s_.autoAudio); return;
+        case ID_TG_KEEP_DISPLAY:
+            s_.keepDisplayOnAudio = !s_.keepDisplayOnAudio;
+            SetToggle(tgKeepDisplay_, s_.keepDisplayOnAudio);
+            UpdateExecutionState();  // se aplica al momento si «Solo audio» ya está en marcha
+            return;
         case ID_TG_TRAY: s_.tray = !s_.tray; SetToggle(tgTray_, s_.tray); return;
         case ID_TG_VSYNC: s_.vsync = !s_.vsync; SetToggle(tgVsync_, s_.vsync); ApplyRenderOptions(); return;
         case ID_TG_FULLRANGE:

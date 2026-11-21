@@ -62,6 +62,7 @@ Notas:
 | Al minimizar, ir a la bandeja | Minimizar = segundo plano. |
 | Al abrir, iniciar Solo audio | Al abrir Pasarela empieza a sonar la consola sin pulsar nada. |
 | Abrir carpeta de capturas | Abre `Imágenes\Pasarela`, donde se guardan las capturas. |
+| Pantalla encendida en «Solo audio» | Desactivada por defecto. Hace que Windows no apague la pantalla mientras suena el audio, como ya ocurre con «Mostrar vídeo». |
 | Diagnóstico | FPS recibidos y mostrados, fotogramas descartados, tiempos medidos, colchón de audio y cortes. |
 
 La configuración se guarda en `Pasarela.ini` junto al `.exe` (o en `%APPDATA%\Pasarela` si esa carpeta no admite escritura). El registro `Pasarela.log` se reinicia en cada ejecución y nunca se envía a ningún sitio.
