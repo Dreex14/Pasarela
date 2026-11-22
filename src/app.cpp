@@ -39,7 +39,7 @@ enum : int {
     ID_BTN_AUDIO = 101, ID_BTN_VIDEO, ID_BTN_STOP, ID_SLIDER_VOL, ID_BTN_MUTE, ID_CB_VIDEO, ID_BTN_REFRESH,
     ID_CB_AOUT, ID_BTN_ADV, ID_CB_QUALITY, ID_CB_FPS, ID_CB_FORMAT, ID_CB_AIN, ID_TG_AUTO_AUDIO, ID_TG_TRAY,
     ID_TG_TOPMOST, ID_TG_VSYNC, ID_TG_FULLRANGE, ID_TG_DIAG, ID_CB_BUFFER, ID_SLIDER_DELAY,
-    ID_BTN_FOLDER, ID_BTN_SHOTS, ID_TG_HIDE_VIDEO, ID_TG_KEEP_DISPLAY,
+    ID_BTN_FOLDER, ID_BTN_SHOTS, ID_TG_HIDE_VIDEO, ID_TG_KEEP_DISPLAY, ID_TG_KEEP_CARD,
 };
 enum : int {
     IDM_FULLSCREEN = 301, IDM_TOPMOST, IDM_MUTE, IDM_DIAG, IDM_HIDE_VIDEO, IDM_SCREENSHOT, IDM_STOP, IDM_SHOW, IDM_AUDIO, IDM_VIDEO,
@@ -79,6 +79,14 @@ int64_t MsToQpc(int ms) {
     QueryPerformanceFrequency(&f);
     return f.QuadPart * ms / 1000;
 }
+
+// Receptor que descarta los fotogramas: sirve para mantener abierta la capturadora sin mostrar nada.
+struct DiscardSink : FrameSink {
+    std::atomic<HRESULT> error{S_OK};
+    std::atomic<uint64_t> frames{0};
+    void OnVideoSample(IMFSample*, const FrameFormat&, int64_t) override { frames++; }
+    void OnVideoError(HRESULT hr) override { error = hr; }
+};
 
 class App {
 public:
@@ -146,6 +154,10 @@ private:
     void ApplyRenderOptions();
     void ApplyVolume();
     void UpdateExecutionState();
+    void UpdateKeepAlive();
+    void StartKeepAlive();
+    void StopKeepAlive();
+    void RestartKeepAlive();
     void SetSession(Session s);
 
     // Ventana de vídeo
@@ -185,7 +197,7 @@ private:
 
     HWND btnAudio_{}, btnVideo_{}, btnStop_{}, slVolume_{}, btnMute_{}, cbVideo_{}, btnRefresh_{}, cbOut_{}, btnAdv_{};
     HWND cbQuality_{}, cbFps_{}, cbFormat_{}, cbIn_{}, tgAutoAudio_{}, tgTray_{}, tgTopmost_{}, tgVsync_{}, tgFullRange_{};
-    HWND tgDiag_{}, cbBuffer_{}, slDelay_{}, btnFolder_{}, btnShots_{}, tgHideVideo_{}, tgKeepDisplay_{};
+    HWND tgDiag_{}, cbBuffer_{}, slDelay_{}, btnFolder_{}, btnShots_{}, tgHideVideo_{}, tgKeepDisplay_{}, tgKeepCard_{};
 
     RECT rcTitle_{}, rcSubtitle_{}, rcVersion_{}, rcVolumeValue_{}, rcStatus_{}, rcTip_{}, rcLblDelay_{},
         rcDiag_{};
@@ -205,6 +217,17 @@ private:
     Session session_ = kOff;
     bool videoActive_ = false, audioActive_ = false;
     VideoCapture* capture_ = nullptr;
+    // Vídeo en segundo plano de «Solo audio» (opcional)
+    VideoCapture* keepAlive_ = nullptr;
+    DiscardSink keepSink_;
+    std::wstring keepSymlink_;
+    VideoFormat keepFmt_{};
+    size_t keepAttempt_ = 0;
+    int64_t keepStartQpc_ = 0, nextKeepRetry_ = 0;
+    bool keepLogged_ = false;
+    // Contadores de audio ya anotados en el registro (para anotar solo los cambios)
+    uint64_t logUnder_ = 0, logTrims_ = 0, logOver_ = 0, logDisc_ = 0;
+    int64_t lastCounterLog_ = 0;
     Renderer renderer_;
     AudioMonitor audio_;
     VideoFormat activeFormat_{};
@@ -380,6 +403,8 @@ void App::CreateControls() {
     tgAutoAudio_ = MakeButton(w, ID_TG_AUTO_AUDIO, L"Al abrir, iniciar Solo audio");
     tgKeepDisplay_ = MakeButton(w, ID_TG_KEEP_DISPLAY, L"Pantalla encendida en «Solo audio»");
     AddTooltip(w, tgKeepDisplay_, L"Evita que Windows apague la pantalla mientras suena el audio");
+    tgKeepCard_ = MakeButton(w, ID_TG_KEEP_CARD, L"Capturadora activa en «Solo audio»");
+    AddTooltip(w, tgKeepCard_, L"Abre el vídeo de la capturadora en segundo plano, sin mostrarlo. Gasta algo de USB y procesador, y otros programas (OBS) no podrán usarla a la vez");
     cbIn_ = MakeCombo(w, ID_CB_AIN);
     cbBuffer_ = MakeCombo(w, ID_CB_BUFFER);
     slDelay_ = ui::CreateSlider(w, ID_SLIDER_DELAY, 0, 300, s_.audioDelayMs);
@@ -396,6 +421,7 @@ void App::CreateControls() {
     SetToggle(tgTray_, s_.tray);
     SetToggle(tgAutoAudio_, s_.autoAudio);
     SetToggle(tgKeepDisplay_, s_.keepDisplayOnAudio);
+    SetToggle(tgKeepCard_, s_.keepCardAwake);
     SetToggle(tgDiag_, s_.diagnostics);
 
     for (const wchar_t* t : {L"Ultra bajo (puede chasquear)", L"Bajo (recomendado)", L"Seguro (más estable)"})
@@ -537,7 +563,7 @@ void App::LayoutSettings() {
     y += P(20);
     add({x, y, x + colW, y + P(18)}, L"VENTANA", 11.5f, ui::theme::textDim, true);
     y += P(28);
-    for (HWND t : {tgHideVideo_, tgTray_, tgAutoAudio_, tgKeepDisplay_}) {
+    for (HWND t : {tgHideVideo_, tgTray_, tgAutoAudio_, tgKeepDisplay_, tgKeepCard_}) {
         place(t, x, y, colW, P(30));
         y += P(36);
     }
@@ -854,6 +880,7 @@ void App::OnVideoDeviceSelected(bool fromUser) {
 void App::RequestFormats(const std::wstring& symlink) {
     if (formatCache_.count(symlink) || formatsLoading_.count(symlink)) return;
     if (videoActive_ && activeSymlink_ == symlink) return;  // en uso por nosotros mismos
+    if (keepAlive_ && keepSymlink_ == symlink) return;
     formatsLoading_.insert(symlink);
     HWND target = hwnd_;
     std::thread([target, symlink] {
@@ -878,6 +905,7 @@ void App::OnFormatsReady(FormatsResult* r) {
     const VideoDevice* d = SelectedVideoDevice();
     if (d && d->symlink == r->symlink) {
         PopulateQuality();
+        if (!pendingVideo_) UpdateKeepAlive();  // si «Solo audio» esperaba a conocer los modos
         if (pendingVideo_) {
             pendingVideo_ = false;
             GoVideo();
@@ -1108,8 +1136,61 @@ void App::RefreshAudioDevices() {
 // Sesión
 // ============================================================================
 
+void App::UpdateKeepAlive() {
+    const bool want = s_.keepCardAwake && session_ == kAudio && !videoActive_;
+    if (!want) {
+        StopKeepAlive();
+        return;
+    }
+    if (!keepAlive_) StartKeepAlive();
+}
+
+void App::StartKeepAlive() {
+    if (keepAlive_) return;
+    const VideoDevice* d = SelectedVideoDevice();
+    VideoFormat primary;
+    std::vector<VideoFormat> fallbacks;
+    if (!d || !CurrentFormats() || !ResolveFormat(primary, &fallbacks)) return;  // se reintenta al conocer los modos
+    std::vector<VideoFormat> options{primary};
+    options.insert(options.end(), fallbacks.begin(), fallbacks.end());
+    const VideoFormat fmt = options[keepAttempt_ % options.size()];
+    keepSink_.error = S_OK;
+    keepSink_.frames = 0;
+    VideoCapture* c = VideoCapture::Create();
+    const HRESULT hr = c->Start(d->symlink, fmt, &keepSink_);
+    if (FAILED(hr)) {
+        c->Release();
+        Log(L"No se pudo abrir la capturadora en segundo plano (%s)", HrHex(hr).c_str());
+        keepAttempt_++;
+        return;
+    }
+    keepAlive_ = c;
+    keepSymlink_ = d->symlink;
+    keepFmt_ = fmt;
+    keepStartQpc_ = QpcNow();
+    keepLogged_ = false;
+    Log(L"Capturadora activa en segundo plano: %ux%u @ %.2f %s", fmt.width, fmt.height, fmt.Fps(),
+        SubtypeName(fmt.subtype));
+}
+
+void App::StopKeepAlive() {
+    if (!keepAlive_) return;
+    keepAlive_->Stop();
+    keepAlive_->Release();
+    keepAlive_ = nullptr;
+    Log(L"Capturadora en segundo plano detenida");
+}
+
+void App::RestartKeepAlive() {
+    if (!keepAlive_) return;
+    StopKeepAlive();
+    keepAttempt_ = 0;
+    UpdateKeepAlive();
+}
+
 void App::SetSession(Session s) {
     session_ = s;
+    UpdateKeepAlive();
     EnableWindow(btnStop_, s != kOff);
     UpdateExecutionState();
     UpdateRunningStatus();
@@ -1161,6 +1242,7 @@ void App::GoVideo() {
     }
     bool hadAudio = audioActive_;
     if (!audioActive_) StartAudio(false);
+    StopKeepAlive();  // la capturadora solo admite un lector de vídeo a la vez
     HRESULT hr = StartVideo();
     if (FAILED(hr)) {
         if (!hadAudio && session_ == kOff) StopAudio();
@@ -1291,11 +1373,19 @@ bool App::StartAudio(bool reportErrors) {
         return false;
     }
     audioActive_ = true;
+    logUnder_ = logTrims_ = logOver_ = logDisc_ = 0;
+    lastCounterLog_ = QpcNow();
     ApplyVolume();
     return true;
 }
 
 void App::StopAudio() {
+    if (audioActive_) {
+        const AudioStats a = audio_.Stats();
+        Log(L"Audio detenido. Totales: vacíos %llu · recortes %llu · desbordes %llu · saltos del driver %llu",
+            (unsigned long long)a.underruns, (unsigned long long)a.trims, (unsigned long long)a.overflows,
+            (unsigned long long)a.discontinuities);
+    }
     audio_.Stop();
     audioActive_ = false;
 }
@@ -1333,6 +1423,46 @@ void App::UpdateExecutionState() {
 
 void App::Tick() {
     const int64_t now = QpcNow();
+
+    // Contadores de audio: se anota en el registro, con la hora, cuando cambian (como mucho cada 5 s).
+    if (audioActive_ && QpcToMs(now - lastCounterLog_) > 5000) {
+        const AudioStats a = audio_.Stats();
+        if (a.underruns != logUnder_ || a.trims != logTrims_ || a.overflows != logOver_ || a.discontinuities != logDisc_) {
+            Log(L"Audio: vacíos %llu (+%llu) · recortes %llu (+%llu) · desbordes %llu (+%llu) · saltos del driver %llu "
+                L"(+%llu) · colchón %.1f/%.1f ms",
+                (unsigned long long)a.underruns, (unsigned long long)(a.underruns - logUnder_),
+                (unsigned long long)a.trims, (unsigned long long)(a.trims - logTrims_), (unsigned long long)a.overflows,
+                (unsigned long long)(a.overflows - logOver_), (unsigned long long)a.discontinuities,
+                (unsigned long long)(a.discontinuities - logDisc_), a.ringFillMs, a.targetFillMs);
+            logUnder_ = a.underruns;
+            logTrims_ = a.trims;
+            logOver_ = a.overflows;
+            logDisc_ = a.discontinuities;
+            lastCounterLog_ = now;
+        }
+    }
+
+    // Vídeo en segundo plano de «Solo audio»: si falla o se detiene, se reabre (probando otro modo).
+    if (s_.keepCardAwake && session_ == kAudio && !videoActive_) {
+        if (keepAlive_) {
+            const HRESULT err = keepSink_.error.load();
+            const bool stalled = QpcToMs(now - keepStartQpc_) > 6000 && keepAlive_->Stats().lastArrivalAgeMs > 5000;
+            if (err != S_OK || stalled) {
+                Log(L"La captura en segundo plano %s (%s); se reintenta", err != S_OK ? L"falló" : L"se detuvo",
+                    HrHex(err).c_str());
+                StopKeepAlive();
+                keepAttempt_++;
+                nextKeepRetry_ = now + MsToQpc(3000);
+            } else if (!keepLogged_ && QpcToMs(now - keepStartQpc_) > 4000) {
+                keepLogged_ = true;
+                Log(L"Capturadora activa en segundo plano: %llu fotogramas recibidos en 4 s",
+                    (unsigned long long)keepSink_.frames.load());
+            }
+        } else if (now >= nextKeepRetry_) {
+            StartKeepAlive();
+            if (!keepAlive_) nextKeepRetry_ = now + MsToQpc(5000);
+        }
+    }
 
     if (videoActive_) {
         if (rendererLost_) {
@@ -1740,6 +1870,8 @@ std::wstring App::BuildAudioDiagnostics() {
     double estimate = a.capturePacketMaxMs + a.ringFillMs + a.renderQueuedMs + a.captureStreamLatencyMs +
                       a.renderStreamLatencyMs;
     s += Fmt(L"\nLatencia de audio estimada (no medida): ≈ %.0f ms · Nivel: %d %%", estimate, int(a.peak * 100));
+    if (keepAlive_)
+        s += Fmt(L"\nCapturadora activa en segundo plano: %u×%u @ %.0f fps", keepFmt_.width, keepFmt_.height, keepFmt_.Fps());
     return s;
 }
 
@@ -1844,6 +1976,11 @@ void App::OnCommand(int id, int code) {
             ShellExecuteW(hwnd_, L"open", DataDirectory().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             return;
         case ID_TG_AUTO_AUDIO: s_.autoAudio = !s_.autoAudio; SetToggle(tgAutoAudio_, s_.autoAudio); return;
+        case ID_TG_KEEP_CARD:
+            s_.keepCardAwake = !s_.keepCardAwake;
+            SetToggle(tgKeepCard_, s_.keepCardAwake);
+            UpdateKeepAlive();  // se aplica al momento: abre o cierra el vídeo en segundo plano
+            return;
         case ID_TG_KEEP_DISPLAY:
             s_.keepDisplayOnAudio = !s_.keepDisplayOnAudio;
             SetToggle(tgKeepDisplay_, s_.keepDisplayOnAudio);
@@ -1862,6 +1999,7 @@ void App::OnCommand(int id, int code) {
         case ID_CB_VIDEO: {
             ClearSticky();
             OnVideoDeviceSelected(true);
+            RestartKeepAlive();
             if (session_ == kVideo) {
                 StopVideo();
                 SetSession(kOff);
@@ -1879,6 +2017,7 @@ void App::OnCommand(int id, int code) {
             s_.fps = 0;
             PopulateFps();
             if (videoActive_) RestartCapture(false);
+            RestartKeepAlive();
             return;
         }
         case ID_CB_FPS: {
@@ -1886,6 +2025,7 @@ void App::OnCommand(int id, int code) {
             s_.fps = double(SendMessageW(cbFps_, CB_GETITEMDATA, i, 0)) / 1000.0;
             PopulateFormat();
             if (videoActive_) RestartCapture(false);
+            RestartKeepAlive();
             return;
         }
         case ID_CB_FORMAT: {
@@ -1894,6 +2034,7 @@ void App::OnCommand(int id, int code) {
             if (i > 0) SendMessageW(cbFormat_, CB_GETLBTEXT, i, (LPARAM)buf);
             s_.format = i > 0 ? buf : L"";
             if (videoActive_) RestartCapture(false);
+            RestartKeepAlive();
             return;
         }
         case ID_CB_AIN: {
@@ -2063,6 +2204,7 @@ LRESULT App::MainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             s_.mainX = wp2.rcNormalPosition.left;
             s_.mainY = wp2.rcNormalPosition.top;
             StopVideo();
+            StopKeepAlive();
             StopAudio();
             s_.Save();
             DestroyWindow(h);

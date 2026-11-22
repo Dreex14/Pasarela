@@ -52,3 +52,20 @@ Has usado Pasarela durante mucho rato, en audio y en vídeo, sin ningún problem
 
 ### 6. PS5
 Desactiva HDCP en la PS5 (*Ajustes › Sistema › HDMI*) y repite la prueba 1 y la 3.
+
+## «Solo audio» con la capturadora activa (22/11/2026)
+
+Probado con la UGREEN 25173, en mudo y con copias aisladas del ejecutable:
+
+| Comprobación | Resultado |
+| --- | --- |
+| Vídeo en segundo plano | Abre 1920×1080 a 60 NV12: 232 fotogramas en 4 s (~58 fps) |
+| Consumo en «Solo audio» con la opción activa | 0,08 % de procesador, 11 MB de RAM privada, 22 hilos |
+| Cambio de modo | Al pasar a «Mostrar vídeo» se cierra el de segundo plano; al ocultar el vídeo se reabre |
+| Activar y desactivar la opción en caliente | Se abre y se cierra al momento |
+| Cierre | Sin procesos colgados |
+| Vacíos de audio en 60 s | «Bajo»: 0 sin vídeo en segundo plano, 1 con él (al arrancar); «Seguro» con él: 0; «Mostrar vídeo»: 0 |
+
+En la primera prueba apareció un episodio aislado de 97 vacíos justo después de cerrar la Pasarela de uso diario. No se pudo repetir en 7 pruebas posteriores (máximo 1, al arrancar).
+
+**Pendiente de comprobar por ti:** una sesión larga de «Solo audio» con la opción activa en la PS5, para ver si desaparece el petardeo. `Pasarela.log` apunta ahora, con la hora, cuándo cambian los contadores de audio (vacíos, recortes, desbordes y saltos del driver), para ver qué pasó si vuelve a ocurrir.

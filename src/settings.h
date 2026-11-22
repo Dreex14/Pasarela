@@ -26,6 +26,7 @@ struct Settings {
     int audioDelayMs = 0;
     bool hideOnVideo = true;    // ocultar la ventana principal al mostrar el vídeo
     bool keepDisplayOnAudio = false;  // «Solo audio» también mantiene la pantalla encendida
+    bool keepCardAwake = false;       // «Solo audio» mantiene abierto, sin mostrarlo, el vídeo de la capturadora
 
     // Ventanas
     RECT videoRect{0, 0, 0, 0};
