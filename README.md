@@ -63,7 +63,7 @@ Notas:
 | Al abrir, iniciar Solo audio | Al abrir Pasarela empieza a sonar la consola sin pulsar nada. |
 | Abrir carpeta de capturas | Abre `Imágenes\Pasarela`, donde se guardan las capturas. |
 | Pantalla encendida en «Solo audio» | Desactivada por defecto. Hace que Windows no apague la pantalla mientras suena el audio, como ya ocurre con «Mostrar vídeo». |
-| Capturadora activa en «Solo audio» | Desactivada por defecto. Abre el vídeo de la capturadora en segundo plano, sin mostrarlo ni procesarlo, con el mismo modo que usas en «Mostrar vídeo». Es un apaño para capturadoras que, sin vídeo abierto, cortan el audio de vez en cuando. Gasta algo de USB y procesador, y otros programas (OBS) no podrán usar la capturadora a la vez. |
+| Capturadora activa en «Solo audio» | Activada por defecto. Abre el vídeo de la capturadora en segundo plano, sin mostrarlo ni procesarlo, con el mismo modo que usas en «Mostrar vídeo». Es un apaño que quita el corte breve de audio que algunas capturadoras tienen sin vídeo abierto (comprobado con la UGREEN 25173 y la PS5). Gasta algo de USB y procesador, y otros programas (OBS) no podrán usar la capturadora a la vez. |
 | Diagnóstico | FPS recibidos y mostrados, fotogramas descartados, tiempos medidos, colchón de audio y cortes. |
 
 La configuración se guarda en `Pasarela.ini` junto al `.exe` (o en `%APPDATA%\Pasarela` si esa carpeta no admite escritura). El registro `Pasarela.log` se reinicia en cada ejecución y nunca se envía a ningún sitio.
