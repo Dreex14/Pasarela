@@ -116,7 +116,7 @@ El diagnóstico marca como **[medido]** lo medido y como **«estimada (no medida
 
 Con la UGREEN 25173 y la PS5 se observó un corte breve del audio (un petardeo y casi un segundo de silencio) cada 30-40 minutos **solo** en «Solo audio» y **nunca** con el vídeo abierto, ni en «Mostrar vídeo» ni con OBS. No se encontró la causa (se descartaron la pantalla, los eventos de Windows y los búferes de Pasarela), pero sí que la condición común de los casos sin fallo es que la capturadora está enviando imagen por USB.
 
-El ajuste *Capturadora activa en «Solo audio»* (activado por defecto desde la 1.0.3) abre en segundo plano el vídeo de la capturadora con el mismo modo que usaría «Mostrar vídeo», y **descarta cada fotograma** sin copiarlo, convertirlo ni mostrarlo (`DiscardSink`). Es un apaño empírico, no una corrección de la causa:
+Desde la 1.0.4, «Solo audio» (sin ajuste, siempre) abre en segundo plano el vídeo de la capturadora con el mismo modo que usaría «Mostrar vídeo», y **descarta cada fotograma** sin copiarlo, convertirlo ni mostrarlo (`DiscardSink`). Es un apaño empírico, no una corrección de la causa:
 
 - Se abre y se cierra solo según el modo: al pasar a «Mostrar vídeo» se cierra (la capturadora admite un lector de vídeo a la vez) y al volver se reabre.
 - Si falla o deja de entregar fotogramas se reintenta, probando otro modo de los que declara la capturadora.

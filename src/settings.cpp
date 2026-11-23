@@ -48,7 +48,6 @@ void Settings::Load() {
     audioDelayMs = Clamp(ReadInt(a, L"RetardoAudioMs", 0), 0, 300);
     hideOnVideo = ReadInt(a, L"OcultarConVideo", 1) != 0;
     keepDisplayOnAudio = ReadInt(a, L"PantallaEncendidaAudio", 0) != 0;
-    keepCardAwake = ReadInt(a, L"CapturadoraActivaAudio", 1) != 0;
 
     videoRect.left = ReadInt(w, L"VideoX", 0);
     videoRect.top = ReadInt(w, L"VideoY", 0);
@@ -93,7 +92,6 @@ void Settings::Save() const {
     WriteInt(a, L"RetardoAudioMs", audioDelayMs);
     WriteInt(a, L"OcultarConVideo", hideOnVideo);
     WriteInt(a, L"PantallaEncendidaAudio", keepDisplayOnAudio);
-    WriteInt(a, L"CapturadoraActivaAudio", keepCardAwake);
 
     WriteInt(w, L"VideoX", videoRect.left);
     WriteInt(w, L"VideoY", videoRect.top);
