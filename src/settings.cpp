@@ -44,7 +44,7 @@ void Settings::Load() {
     topmost = ReadInt(a, L"SiempreEncima", 0) != 0;
     tray = ReadInt(a, L"Bandeja", 1) != 0;
     diagnostics = ReadInt(a, L"Diagnostico", 0) != 0;
-    bufferProfile = Clamp(ReadInt(a, L"BuferAudio", 1), 0, 2);
+    bufferProfile = Clamp(ReadInt(a, L"BuferAudio", 2), 0, 2);
     audioDelayMs = Clamp(ReadInt(a, L"RetardoAudioMs", 0), 0, 300);
     hideOnVideo = ReadInt(a, L"OcultarConVideo", 1) != 0;
     keepDisplayOnAudio = ReadInt(a, L"PantallaEncendidaAudio", 0) != 0;

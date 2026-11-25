@@ -18,7 +18,7 @@ Aplicación pequeña para Windows 10/11 que sustituye a OBS cuando solo quieres 
 2. Abre `Pasarela.exe`.
 3. Pulsa **Solo audio** para oír la consola, o **Mostrar vídeo** para verla.
 
-En la ventana de vídeo: **doble clic** = pantalla completa, **Esc** = salir de pantalla completa, **C** = hacer captura, **clic derecho** = opciones, **M** = silenciar, **T** = siempre encima, **F3** = diagnóstico.
+En la ventana de vídeo: **doble clic** = pantalla completa, **Esc** = salir de pantalla completa, **C** = hacer captura, **clic derecho** = opciones, **M** = silenciar, **T** = siempre encima, **F3** = diagnóstico, **rueda del ratón** = subir o bajar el volumen. Al mover el ratón sobre el vídeo aparece abajo una barra de volumen que se puede arrastrar (hasta el 200 %).
 
 - Al pulsar **Mostrar vídeo**, la ventana principal se oculta y solo queda la del vídeo. Al cerrar el vídeo vuelve sola (el audio sigue sonando).
 - Al **minimizar** la ventana, Pasarela pasa a **segundo plano**: desaparece de la barra de tareas y sigue funcionando con un icono en la bandeja del sistema. Un clic en ese icono la devuelve; con el botón derecho tienes Solo audio, Mostrar vídeo, Silenciar, Detener y Salir.
@@ -55,7 +55,7 @@ Notas:
 | --- | --- |
 | Calidad / FPS / Formato | «Automática» elige ~60 FPS, la mayor resolución que cabe en tu pantalla y formatos sin compresión (NV12/YUY2) antes que MJPEG. Solo se listan modos que la capturadora declara de verdad. |
 | Entrada de audio | Automática: la entrada que pertenece a la misma capturadora (detectada por el identificador del aparato). |
-| Búfer de audio | *Bajo* (recomendado), *Ultra bajo* (puede chasquear) o *Seguro*. |
+| Búfer de audio | *Seguro* (recomendado, el más estable), *Bajo* o *Ultra bajo* (puede chasquear). |
 | Retardo de audio | Retrasa el sonido a propósito si lo oyes antes que la imagen. Por defecto, 0. |
 | Volumen por encima del 100 % | El control llega al 200 %. Por encima del 100 % refuerza el sonido (hasta ×4) con un limitador suave para que no distorsione; el número se pone en amarillo. |
 | Sincronización vertical | Desactivada = cada fotograma se muestra en cuanto llega (mínima latencia, puede haber *tearing*). Activada = sin *tearing*, hasta un refresco más de retardo. |

@@ -153,6 +153,10 @@ private:
     void Tick();
     void ApplyRenderOptions();
     void ApplyVolume();
+    void SetVolumeFromUser(int volume, bool showOverlay);
+    void ShowVolumeOverlay();
+    VolumeBarGeometry VideoVolumeBar() const;
+    int VolumeAtX(int x) const;
     void UpdateExecutionState();
     void UpdateKeepAlive();
     void StartKeepAlive();
@@ -247,6 +251,8 @@ private:
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     bool cursorHidden_ = false;
     POINT lastMouse_{-1, -1};
+    bool volDrag_ = false;
+    int64_t volShownUntil_ = 0;
 
     bool trayActive_ = false;
     UINT taskbarCreatedMsg_ = 0;
@@ -421,7 +427,7 @@ void App::CreateControls() {
     SetToggle(tgKeepDisplay_, s_.keepDisplayOnAudio);
     SetToggle(tgDiag_, s_.diagnostics);
 
-    for (const wchar_t* t : {L"Ultra bajo (puede chasquear)", L"Bajo (recomendado)", L"Seguro (más estable)"})
+    for (const wchar_t* t : {L"Ultra bajo (puede chasquear)", L"Bajo", L"Seguro (recomendado)"})
         SendMessageW(cbBuffer_, CB_ADDSTRING, 0, (LPARAM)t);
     SendMessageW(cbBuffer_, CB_SETCURSEL, s_.bufferProfile, 0);
 }
@@ -1395,6 +1401,40 @@ void App::RestartAudio() {
     UpdateRunningStatus();
 }
 
+// Cambio de volumen desde la ventana de vídeo (rueda o barra): se refleja también en la ventana principal.
+void App::SetVolumeFromUser(int volume, bool showOverlay) {
+    volume = Clamp(volume, 0, kMaxVolume);
+    if (volume != s_.volume || (s_.muted && volume > 0)) {
+        s_.volume = volume;
+        if (s_.muted && s_.volume > 0) s_.muted = false;
+        ApplyVolume();
+        ui::SliderSetValue(slVolume_, s_.volume);
+        Redraw();
+    }
+    if (showOverlay) ShowVolumeOverlay();
+}
+
+void App::ShowVolumeOverlay() {
+    if (!video_) return;
+    renderer_.SetVolumeOverlay(s_.volume, kMaxVolume, s_.muted, 2000);
+    volShownUntil_ = QpcNow() + MsToQpc(2000);
+}
+
+VolumeBarGeometry App::VideoVolumeBar() const {
+    RECT rc{};
+    GetClientRect(video_, &rc);
+    return ComputeVolumeBar(rc.right, rc.bottom, GetDpiForWindow(video_) / 96.0f);
+}
+
+int App::VolumeAtX(int x) const {
+    const VolumeBarGeometry g = VideoVolumeBar();
+    if (g.trackRight <= g.trackLeft) return s_.volume;
+    int v = int(std::lround(double(x - g.trackLeft) * kMaxVolume / double(g.trackRight - g.trackLeft)));
+    v = Clamp(v, 0, kMaxVolume);
+    if (std::abs(v - 100) <= 3) v = 100;  // se «engancha» al 100 % para volver fácil al volumen normal
+    return v;
+}
+
 void App::ApplyVolume() {
     audio_.SetVolume(VolumeToGain(s_.volume));
     audio_.SetMuted(s_.muted);
@@ -1697,9 +1737,39 @@ LRESULT App::VideoProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             renderer_.NotifyResize();
             return 0;
         }
-        case WM_LBUTTONDBLCLK:
-            ToggleFullscreen();
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONDBLCLK: {
+            POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            const VolumeBarGeometry g = VideoVolumeBar();
+            if (QpcNow() < volShownUntil_ && PtInRect(&g.panel, pt)) {
+                volDrag_ = true;
+                SetCapture(h);
+                SetVolumeFromUser(VolumeAtX(pt.x), true);
+                return 0;
+            }
+            if (msg == WM_LBUTTONDBLCLK) ToggleFullscreen();
             return 0;
+        }
+        case WM_LBUTTONUP:
+            if (volDrag_) {
+                volDrag_ = false;
+                ReleaseCapture();
+                s_.Save();
+            }
+            return 0;
+        case WM_CAPTURECHANGED:
+            volDrag_ = false;
+            return 0;
+        case WM_MOUSEWHEEL: {
+            const int notches = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
+            if (notches) {
+                SetVolumeFromUser(s_.volume + notches * 5, true);
+                s_.Save();
+            } else {
+                ShowVolumeOverlay();
+            }
+            return 0;
+        }
         case WM_RBUTTONUP: {
             POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
             ClientToScreen(h, &pt);
@@ -1724,6 +1794,8 @@ LRESULT App::VideoProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
             if (pt.x == lastMouse_.x && pt.y == lastMouse_.y) return 0;
             lastMouse_ = pt;
+            if (volDrag_) SetVolumeFromUser(VolumeAtX(pt.x), true);
+            else ShowVolumeOverlay();  // al mover el ratón sobre el vídeo aparece la barra de volumen
             if (cursorHidden_) {
                 cursorHidden_ = false;
                 SetCursor(LoadCursorW(nullptr, IDC_ARROW));
@@ -1948,6 +2020,7 @@ void App::OnCommand(int id, int code) {
         case IDM_MUTE:
             s_.muted = !s_.muted;
             ApplyVolume();
+            ShowVolumeOverlay();
             Redraw();
             return;
         case IDM_TOPMOST: SetTopmost(!s_.topmost); return;

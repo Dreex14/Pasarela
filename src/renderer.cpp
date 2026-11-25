@@ -187,6 +187,19 @@ void Renderer::SetDiagnosticsText(const std::wstring& t) {
     if (wakeEvent_) SetEvent(wakeEvent_);
 }
 
+void Renderer::SetVolumeOverlay(int volume, int maxVolume, bool muted, int ms) {
+    {
+        std::lock_guard<std::mutex> lock(optMutex_);
+        volValue_ = volume;
+        volMax_ = std::max(1, maxVolume);
+        volMuted_ = muted;
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        volUntil_ = QpcNow() + f.QuadPart * ms / 1000;
+    }
+    if (wakeEvent_) SetEvent(wakeEvent_);
+}
+
 void Renderer::SetHintText(const std::wstring& t, int ms) {
     {
         std::lock_guard<std::mutex> lock(optMutex_);
@@ -625,15 +638,22 @@ void Renderer::DrawFrame() {
 void Renderer::DrawOverlay() {
     if (!d2dCtx_ || !d2dTarget_) return;
     std::wstring status, diag, hint;
-    bool showDiag;
+    bool showDiag, showVol = false, volMuted = false;
+    int volValue = 0, volMax = 200;
     {
         std::lock_guard<std::mutex> lock(optMutex_);
         status = statusText_;
         diag = diagText_;
         showDiag = opts_.showDiagnostics;
         if (QpcNow() < hintUntil_) hint = hintText_;
+        if (QpcNow() < volUntil_) {
+            showVol = true;
+            volValue = volValue_;
+            volMax = volMax_;
+            volMuted = volMuted_;
+        }
     }
-    if (status.empty() && (!showDiag || diag.empty()) && hint.empty()) return;
+    if (status.empty() && (!showDiag || diag.empty()) && hint.empty() && !showVol) return;
     float scale = GetDpiForWindow(hwnd_) / 96.0f;
     d2dCtx_->BeginDraw();
     if (showDiag && !diag.empty() && textDiag_) {
@@ -663,12 +683,59 @@ void Renderer::DrawOverlay() {
             float pad = 10 * scale;
             float x = (backW_ - m.widthIncludingTrailingWhitespace) / 2;
             float y = backH_ - m.height - 40 * scale;
+            if (showVol) y -= 56 * scale;  // por encima de la barra de volumen
             D2D1_ROUNDED_RECT rr = {D2D1::RectF(x - 2 * pad, y - pad, x + m.widthIncludingTrailingWhitespace + 2 * pad,
                                                 y + m.height + pad),
                                     10 * scale, 10 * scale};
             d2dCtx_->FillRoundedRectangle(rr, brushPanel_.Get());
             d2dCtx_->DrawTextLayout(D2D1::Point2F(0, y), layout.Get(), brushText_.Get());
         }
+    }
+    if (showVol && textHint_) {
+        const VolumeBarGeometry g = ComputeVolumeBar(int(backW_), int(backH_), scale);
+        const D2D1_RECT_F pr = D2D1::RectF(float(g.panel.left), float(g.panel.top), float(g.panel.right),
+                                           float(g.panel.bottom));
+        d2dCtx_->FillRoundedRectangle({pr, 12 * scale, 12 * scale}, brushPanel_.Get());
+        // Icono del altavoz (fuente de iconos de Windows) y porcentaje
+        static const wchar_t* kIconFont = L"Segoe Fluent Icons";
+        ComPtr<IDWriteTextFormat> icon;
+        dwFactory_->CreateTextFormat(kIconFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                                     DWRITE_FONT_STRETCH_NORMAL, 16.0f * scale, L"", &icon);
+        if (!icon)
+            dwFactory_->CreateTextFormat(L"Segoe MDL2 Assets", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+                                         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 16.0f * scale, L"",
+                                         &icon);
+        const wchar_t* glyph = volMuted || volValue == 0 ? L"\uE74F" : L"\uE767";
+        if (icon) {
+            icon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            icon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            d2dCtx_->DrawText(glyph, 1, icon.Get(),
+                              D2D1::RectF(pr.left + 8 * scale, pr.top, float(g.trackLeft) - 8 * scale, pr.bottom),
+                              brushText_.Get());
+        }
+        const float x0 = float(g.trackLeft), x1 = float(g.trackRight), y = float(g.trackY);
+        const float th = 4 * scale;
+        ComPtr<ID2D1SolidColorBrush> track, fill, boost;
+        d2dCtx_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.22f), &track);
+        d2dCtx_->CreateSolidColorBrush(D2D1::ColorF(0.33f, 0.55f, 1.0f, 1.0f), &fill);
+        d2dCtx_->CreateSolidColorBrush(D2D1::ColorF(0.98f, 0.76f, 0.25f, 1.0f), &boost);
+        auto bar = [&](float a, float b, ID2D1Brush* br) {
+            if (b > a) d2dCtx_->FillRoundedRectangle({D2D1::RectF(a, y - th / 2, b, y + th / 2), th / 2, th / 2}, br);
+        };
+        const float shown = volMuted ? 0.0f : float(volValue);
+        const float xv = x0 + (x1 - x0) * shown / float(volMax);
+        const float x100 = x0 + (x1 - x0) * 100.0f / float(volMax);
+        bar(x0, x1, track.Get());
+        bar(x0, std::min(xv, x100), fill.Get());
+        if (xv > x100) bar(x100, xv, boost.Get());
+        // Marca del 100 % y tirador
+        d2dCtx_->FillRectangle(D2D1::RectF(x100 - 1 * scale, y - 7 * scale, x100 + 1 * scale, y + 7 * scale),
+                               track.Get());
+        d2dCtx_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(xv, y), 7 * scale, 7 * scale), brushText_.Get());
+        std::wstring pct = volMuted ? std::wstring(L"Mudo") : Fmt(L"%d %%", volValue);
+        d2dCtx_->DrawText(pct.c_str(), UINT32(pct.size()), textHint_.Get(),
+                          D2D1::RectF(x1 + 8 * scale, pr.top + 12 * scale, pr.right - 6 * scale, pr.bottom),
+                          volValue > 100 && !volMuted ? boost.Get() : brushText_.Get());
     }
     d2dCtx_->EndDraw();
 }

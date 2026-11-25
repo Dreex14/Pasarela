@@ -32,6 +32,24 @@ struct RenderStats {
     std::wstring adapter;
 };
 
+// Barra de volumen sobre el vídeo: panel abajo en el centro y pista por la que se arrastra
+// (coordenadas de cliente en píxeles).
+struct VolumeBarGeometry {
+    RECT panel{};
+    int trackLeft = 0, trackRight = 0, trackY = 0;
+};
+inline VolumeBarGeometry ComputeVolumeBar(int clientW, int clientH, float scale) {
+    VolumeBarGeometry g;
+    int bw = std::min(int(320 * scale), clientW - int(24 * scale));
+    int bh = int(44 * scale);
+    int x = (clientW - bw) / 2, y = clientH - bh - int(20 * scale);
+    g.panel = {x, y, x + bw, y + bh};
+    g.trackLeft = x + int(44 * scale);
+    g.trackRight = x + bw - int(68 * scale);
+    g.trackY = y + bh / 2;
+    return g;
+}
+
 class Renderer : public FrameSink {
 public:
     Renderer() = default;
@@ -44,6 +62,8 @@ public:
     void SetStatusText(const std::wstring& text);   // mensaje central (p. ej. "Sin señal")
     void SetDiagnosticsText(const std::wstring& t); // panel de diagnóstico
     void SetHintText(const std::wstring& t, int ms);
+    // Barra de volumen superpuesta (0..maxVolume) visible durante «ms».
+    void SetVolumeOverlay(int volume, int maxVolume, bool muted, int ms);
     void NotifyResize();
     // Guarda en `folder` un PNG sin pérdida del último fotograma, a la resolución
     // nativa de la capturadora (sin escalar y sin textos superpuestos).
@@ -92,6 +112,9 @@ private:
     RenderOptions opts_;
     std::wstring statusText_, diagText_, hintText_;
     int64_t hintUntil_ = 0;
+    int volValue_ = 0, volMax_ = 200;
+    bool volMuted_ = false;
+    int64_t volUntil_ = 0;
 
     // D3D
     ComPtr<ID3D11Device> device_;

@@ -22,7 +22,7 @@ struct Settings {
     bool topmost = false;
     bool tray = true;
     bool diagnostics = false;
-    int bufferProfile = 1;
+    int bufferProfile = 2;
     int audioDelayMs = 0;
     bool hideOnVideo = true;    // ocultar la ventana principal al mostrar el vídeo
     bool keepDisplayOnAudio = false;  // «Solo audio» también mantiene la pantalla encendida
