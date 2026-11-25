@@ -27,7 +27,7 @@
 using Microsoft::WRL::ComPtr;
 
 #define APP_NAME L"Pasarela"
-#define APP_VERSION L"1.0.4"
+#define APP_VERSION L"1.0.5"
 
 // Mensajes privados entre hilos y la ventana principal.
 enum : UINT {

@@ -168,9 +168,22 @@ HRESULT InitShared(IMMDevice* dev, const WAVEFORMATEX* fmt, DWORD extraFlags, Co
 }  // namespace
 
 float VolumeToGain(int v) {
-    float x = Clamp(v, 0, 100) / 100.0f;
+    // 0..100 igual que siempre; de 100 a 200 la misma curva sigue subiendo hasta ×4 (+12 dB).
+    float x = Clamp(v, 0, kMaxVolume) / 100.0f;
     return x * x;
 }
+
+namespace {
+// Limitador suave: solo actúa con el volumen por encima del 100 %. Por debajo de 0,8 no toca la señal y por
+// encima la acerca a 1 sin pasarse, para que el refuerzo no distorsione con recortes bruscos.
+inline float SoftLimit(float x) {
+    const float knee = 0.8f;
+    float a = std::fabs(x);
+    if (a <= knee) return x;
+    float y = knee + (1.0f - knee) * std::tanh((a - knee) / (1.0f - knee));
+    return x < 0 ? -y : y;
+}
+}  // namespace
 
 void AudioMonitor::Ring::Init(size_t frames, int ch) {
     capacity = frames;
@@ -488,6 +501,7 @@ void AudioMonitor::Produce(float* out, UINT32 frames) {
     ratio_ = 1.0 + Clamp(errMs * 0.0002, -0.003, 0.003);
 
     const float gainTarget = muted_.load() ? 0.0f : gainTarget_.load();
+    const bool boost = gainTarget > 1.0f || gain_ > 1.0f;
     const UINT32 inCh = inCh_, outCh = outCh_;
     const UINT32 rampLen = 96;
     float peak = 0;
@@ -509,19 +523,19 @@ void AudioMonitor::Produce(float* out, UINT32 frames) {
         if (inCh == 1) {
             float v = a[0] + (b[0] - a[0]) * f;
             peak = std::max(peak, std::fabs(v));
-            o[0] = v * g;
-            if (outCh > 1) o[1] = v * g;
+            o[0] = boost ? SoftLimit(v * g) : v * g;
+            if (outCh > 1) o[1] = o[0];
         } else if (outCh == 1) {
             float l = a[0] + (b[0] - a[0]) * f, r = a[1] + (b[1] - a[1]) * f;
             float v = 0.5f * (l + r);
             peak = std::max(peak, std::fabs(v));
-            o[0] = v * g;
+            o[0] = boost ? SoftLimit(v * g) : v * g;
         } else {
             UINT32 n = std::min(inCh, outCh);
             for (UINT32 c = 0; c < n; ++c) {
                 float v = a[c] + (b[c] - a[c]) * f;
                 peak = std::max(peak, std::fabs(v));
-                o[c] = v * g;
+                o[c] = boost ? SoftLimit(v * g) : v * g;
             }
         }
         readFrac_ += ratio_;

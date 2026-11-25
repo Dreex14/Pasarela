@@ -123,5 +123,6 @@ private:
     AudioStats stats_;
 };
 
-// Curva perceptual para el control de volumen (0..100 -> ganancia lineal).
-float VolumeToGain(int volume0to100);
+// Curva perceptual para el control de volumen (0..kMaxVolume -> ganancia lineal). Por encima de 100 refuerza.
+constexpr int kMaxVolume = 200;
+float VolumeToGain(int volume);

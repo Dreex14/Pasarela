@@ -42,7 +42,7 @@ Conclusión: para igualar a OBS basta con capturar sin búferes intermedios, mos
 | `devices.*` | Enumerar capturadoras (MF) y endpoints de audio (MMDevice); leer los modos reales; emparejar vídeo y audio de la misma capturadora por `ContainerId` (o por nombre); elección automática del modo; avisos de altas/bajas de audio. |
 | `video_capture.*` | Source Reader asíncrono con `MF_LOW_LATENCY`. Modo elegido en la propia fuente. Sin conversores para NV12/YUY2/RGB32; decodificador solo para MJPEG. Detecta huecos por marca de tiempo. |
 | `renderer.*` | Hilo propio de Direct3D 11. Buzón de una plaza, conversión YUV→RGB en *shader*, escalado con relación de aspecto, textos de estado y diagnóstico con Direct2D. |
-| `audio_monitor.*` | Entrada WASAPI → anillo SPSC sin bloqueos → salida WASAPI. Control de deriva, recortes, cebado, volumen y silencio. |
+| `audio_monitor.*` | Entrada WASAPI → anillo SPSC sin bloqueos → salida WASAPI. Control de deriva, recortes, cebado, volumen (hasta 200 %, con limitador suave por encima del 100 %) y silencio. |
 | `app.*` | Ventanas, bandeja, modos, recuperación ante errores, diagnóstico. |
 | `settings.*` | `Pasarela.ini` (UTF-16, local). |
 | `ui.*` | Tema oscuro, pintor Direct2D, deslizador y desplegables propios. |

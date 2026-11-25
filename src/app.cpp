@@ -381,7 +381,7 @@ void App::CreateControls() {
     btnAudio_ = MakeButton(hwnd_, ID_BTN_AUDIO, L"Solo audio");
     btnVideo_ = MakeButton(hwnd_, ID_BTN_VIDEO, L"Mostrar vídeo");
     btnStop_ = MakeButton(hwnd_, ID_BTN_STOP, L"Detener");
-    slVolume_ = ui::CreateSlider(hwnd_, ID_SLIDER_VOL, 0, 100, s_.volume);
+    slVolume_ = ui::CreateSlider(hwnd_, ID_SLIDER_VOL, 0, kMaxVolume, s_.volume);
     btnMute_ = MakeButton(hwnd_, ID_BTN_MUTE);
     cbOut_ = MakeCombo(hwnd_, ID_CB_AOUT);
     cbVideo_ = MakeCombo(hwnd_, ID_CB_VIDEO);
@@ -649,7 +649,7 @@ void App::Paint(HDC dc) {
     p.Text(dev ? dev->name : L"Capturadora HDMI", rcSubtitle_, 13.0f * scale_, textDim);
     PaintLabels(p, mainLabels_);
     p.Text(s_.muted ? std::wstring(L"Silenciado") : Fmt(L"%d %%", s_.volume), rcVolumeValue_, 13.0f * scale_,
-           s_.muted ? danger : textDim, ui::Painter::Right);
+           s_.muted ? danger : (s_.volume > 100 ? warn : textDim), ui::Painter::Right);
 
     // Estado: tarjeta con un punto del color del estado
     p.Round(rcStatus_, 10 * scale_, surface);

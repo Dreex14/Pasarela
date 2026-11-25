@@ -36,7 +36,7 @@ void Settings::Load() {
     format = ReadStr(d, L"Formato", L"");
     audioIn = ReadStr(d, L"AudioEntrada", L"");
     audioOut = ReadStr(d, L"AudioSalida", L"");
-    volume = Clamp(ReadInt(d, L"Volumen", 80), 0, 100);
+    volume = Clamp(ReadInt(d, L"Volumen", 80), 0, 200);
     muted = ReadInt(d, L"Silencio", 0) != 0;
 
     vsync = ReadInt(a, L"VSync", 0) != 0;

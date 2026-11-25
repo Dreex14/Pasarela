@@ -57,6 +57,7 @@ Notas:
 | Entrada de audio | Automática: la entrada que pertenece a la misma capturadora (detectada por el identificador del aparato). |
 | Búfer de audio | *Bajo* (recomendado), *Ultra bajo* (puede chasquear) o *Seguro*. |
 | Retardo de audio | Retrasa el sonido a propósito si lo oyes antes que la imagen. Por defecto, 0. |
+| Volumen por encima del 100 % | El control llega al 200 %. Por encima del 100 % refuerza el sonido (hasta ×4) con un limitador suave para que no distorsione; el número se pone en amarillo. |
 | Sincronización vertical | Desactivada = cada fotograma se muestra en cuanto llega (mínima latencia, puede haber *tearing*). Activada = sin *tearing*, hasta un refresco más de retardo. |
 | Ocultar Pasarela al mostrar el vídeo | Activado por defecto: con vídeo solo se ve su ventana. |
 | Al minimizar, ir a la bandeja | Minimizar = segundo plano. |
