@@ -64,6 +64,7 @@ public:
     void SetHintText(const std::wstring& t, int ms);
     // Barra de volumen superpuesta (0..maxVolume) visible durante «ms».
     void SetVolumeOverlay(int volume, int maxVolume, bool muted, int ms);
+    void HideVolumeOverlay();
     void NotifyResize();
     // Guarda en `folder` un PNG sin pérdida del último fotograma, a la resolución
     // nativa de la capturadora (sin escalar y sin textos superpuestos).

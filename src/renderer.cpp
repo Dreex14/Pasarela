@@ -200,6 +200,14 @@ void Renderer::SetVolumeOverlay(int volume, int maxVolume, bool muted, int ms) {
     if (wakeEvent_) SetEvent(wakeEvent_);
 }
 
+void Renderer::HideVolumeOverlay() {
+    {
+        std::lock_guard<std::mutex> lock(optMutex_);
+        volUntil_ = 0;
+    }
+    if (wakeEvent_) SetEvent(wakeEvent_);
+}
+
 void Renderer::SetHintText(const std::wstring& t, int ms) {
     {
         std::lock_guard<std::mutex> lock(optMutex_);

@@ -251,7 +251,7 @@ private:
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     bool cursorHidden_ = false;
     POINT lastMouse_{-1, -1};
-    bool volDrag_ = false;
+    bool volDrag_ = false, trackingLeave_ = false;
     int64_t volShownUntil_ = 0;
 
     bool trayActive_ = false;
@@ -1760,6 +1760,14 @@ LRESULT App::VideoProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_CAPTURECHANGED:
             volDrag_ = false;
             return 0;
+        case WM_MOUSELEAVE:  // el ratón sale del vídeo: la barra de volumen se va al momento
+            trackingLeave_ = false;
+            lastMouse_ = {-1, -1};
+            if (!volDrag_) {
+                renderer_.HideVolumeOverlay();
+                volShownUntil_ = 0;
+            }
+            return 0;
         case WM_MOUSEWHEEL: {
             const int notches = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
             if (notches) {
@@ -1794,6 +1802,10 @@ LRESULT App::VideoProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
             if (pt.x == lastMouse_.x && pt.y == lastMouse_.y) return 0;
             lastMouse_ = pt;
+            if (!trackingLeave_) {  // avisar cuando el ratón salga de la ventana
+                TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, h, 0};
+                trackingLeave_ = TrackMouseEvent(&tme) != FALSE;
+            }
             if (volDrag_) SetVolumeFromUser(VolumeAtX(pt.x), true);
             else ShowVolumeOverlay();  // al mover el ratón sobre el vídeo aparece la barra de volumen
             if (cursorHidden_) {

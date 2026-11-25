@@ -18,7 +18,7 @@ Aplicación pequeña para Windows 10/11 que sustituye a OBS cuando solo quieres 
 2. Abre `Pasarela.exe`.
 3. Pulsa **Solo audio** para oír la consola, o **Mostrar vídeo** para verla.
 
-En la ventana de vídeo: **doble clic** = pantalla completa, **Esc** = salir de pantalla completa, **C** = hacer captura, **clic derecho** = opciones, **M** = silenciar, **T** = siempre encima, **F3** = diagnóstico, **rueda del ratón** = subir o bajar el volumen. Al mover el ratón sobre el vídeo aparece abajo una barra de volumen que se puede arrastrar (hasta el 200 %).
+En la ventana de vídeo: **doble clic** = pantalla completa, **Esc** = salir de pantalla completa, **C** = hacer captura, **clic derecho** = opciones, **M** = silenciar, **T** = siempre encima, **F3** = diagnóstico, **rueda del ratón** = subir o bajar el volumen. Al mover el ratón sobre el vídeo aparece abajo una barra de volumen que se puede arrastrar (hasta el 200 %); se oculta al sacar el ratón del vídeo o al dejarlo quieto 2 segundos.
 
 - Al pulsar **Mostrar vídeo**, la ventana principal se oculta y solo queda la del vídeo. Al cerrar el vídeo vuelve sola (el audio sigue sonando).
 - Al **minimizar** la ventana, Pasarela pasa a **segundo plano**: desaparece de la barra de tareas y sigue funcionando con un icono en la bandeja del sistema. Un clic en ese icono la devuelve; con el botón derecho tienes Solo audio, Mostrar vídeo, Silenciar, Detener y Salir.
